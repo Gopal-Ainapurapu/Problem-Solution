@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-console.log('Registration request body:', req.body);
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();

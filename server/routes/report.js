@@ -1,27 +1,67 @@
-
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { body, query, validationResult } from 'express-validator';
 
 import Report from '../models/Report.js';
+import Notification from '../models/Notification.js';
+import User from '../models/User.js';
+
 import {
   protect,
-  requireRole
+  requireRole,
 } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
+// Create a notification without breaking a successful report operation.
+async function createUserNotification(notificationData) {
+  try {
+    await Notification.create(notificationData);
+  } catch (error) {
+    console.error('Create notification error:', error.message);
+  }
+}
+
+// Validate express-validator results.
 function validateRequest(req, res, next) {
   const errors = validationResult(req);
 
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
-      errors: errors.array()
+      errors: errors.array(),
     });
   }
 
   next();
+}
+
+// Notification details for each supported report status.
+function getStatusNotification(status, title) {
+  const notifications = {
+    verified: {
+      type: 'report-verified',
+      title: 'Report verified',
+      message: `Your report "${title}" has been verified.`,
+    },
+    'in-progress': {
+      type: 'report-in-progress',
+      title: 'Work in progress',
+      message: `Work has started on your report "${title}".`,
+    },
+    resolved: {
+      type: 'report-resolved',
+      title: 'Report resolved',
+      message: `Your report "${title}" has been resolved.`,
+    },
+    rejected: {
+      type: 'report-rejected',
+      title: 'Report rejected',
+      message: `Your report "${title}" has been rejected.`,
+    },
+  };
+
+  return notifications[status];
 }
 
 // 1. Create a community problem report
@@ -48,7 +88,7 @@ router.post(
         'streetlight',
         'drainage',
         'public-safety',
-        'other'
+        'other',
       ])
       .withMessage('Invalid report category.'),
 
@@ -65,22 +105,30 @@ router.post(
       .isString()
       .trim()
       .isLength({ max: 300 })
-      .withMessage('Address cannot exceed 300 characters.')
+      .withMessage('Address cannot exceed 300 characters.'),
   ],
   validateRequest,
   async (req, res) => {
     try {
-      const { title, description, category, location, address } = req.body;
+      const {
+        title,
+        description,
+        category,
+        location,
+        address,
+      } = req.body;
 
       const [longitude, latitude] = location.coordinates;
 
       if (
-        longitude < -180 || longitude > 180 ||
-        latitude < -90 || latitude > 90
+        longitude < -180 ||
+        longitude > 180 ||
+        latitude < -90 ||
+        latitude > 90
       ) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid longitude or latitude.'
+          message: 'Invalid longitude or latitude.',
         });
       }
 
@@ -91,22 +139,39 @@ router.post(
         category,
         location: {
           type: 'Point',
-          coordinates: [longitude, latitude]
+          coordinates: [longitude, latitude],
         },
-        address
+        address,
+        status: 'pending',
+        statusHistory: [
+          {
+            status: 'pending',
+            changedBy: req.user._id,
+            note: 'Report submitted.',
+          },
+        ],
+      });
+
+      // Notify the citizen that their report was submitted.
+      await createUserNotification({
+        recipient: req.user._id,
+        report: report._id,
+        type: 'report-submitted',
+        title: 'Report submitted successfully',
+        message: `Your report "${report.title}" has been submitted and is awaiting review.`,
       });
 
       return res.status(201).json({
         success: true,
         message: 'Community report created successfully.',
-        report
+        report,
       });
     } catch (error) {
       console.error('Create report error:', error.message);
 
       return res.status(500).json({
         success: false,
-        message: 'Unable to create report right now.'
+        message: 'Unable to create report right now.',
       });
     }
   }
@@ -126,7 +191,7 @@ router.get(
         'streetlight',
         'drainage',
         'public-safety',
-        'other'
+        'other',
       ]),
 
     query('status')
@@ -137,11 +202,11 @@ router.get(
         'assigned',
         'in-progress',
         'resolved',
-        'rejected'
+        'rejected',
       ]),
 
     query('page').optional().isInt({ min: 1 }),
-    query('limit').optional().isInt({ min: 1, max: 50 })
+    query('limit').optional().isInt({ min: 1, max: 50 }),
   ],
   validateRequest,
   async (req, res) => {
@@ -167,7 +232,7 @@ router.get(
           .limit(limit)
           .lean(),
 
-        Report.countDocuments(filters)
+        Report.countDocuments(filters),
       ]);
 
       return res.json({
@@ -177,15 +242,15 @@ router.get(
           page,
           limit,
           total,
-          totalPages: Math.ceil(total / limit)
-        }
+          totalPages: Math.ceil(total / limit),
+        },
       });
     } catch (error) {
       console.error('Get reports error:', error.message);
 
       return res.status(500).json({
         success: false,
-        message: 'Unable to fetch reports right now.'
+        message: 'Unable to fetch reports right now.',
       });
     }
   }
@@ -195,62 +260,93 @@ router.get(
 router.get('/mine', protect, async (req, res) => {
   try {
     const reports = await Report.find({
-      reporter: req.user._id
-    }).sort({ createdAt: -1 }).lean();
+      reporter: req.user._id,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.json({
       success: true,
       count: reports.length,
-      reports
+      reports,
     });
   } catch (error) {
     console.error('Get my reports error:', error.message);
 
     return res.status(500).json({
       success: false,
-      message: 'Unable to fetch your reports right now.'
+      message: 'Unable to fetch your reports right now.',
     });
   }
 });
 
-// 4. Get a single report by ID
+// 4. Get reports assigned to the logged-in volunteer
+router.get(
+  '/assigned',
+  protect,
+  requireRole('volunteer'),
+  async (req, res) => {
+    try {
+      const reports = await Report.find({
+        assignedVolunteer: req.user._id,
+      })
+        .sort({ createdAt: -1 })
+        .lean();
+
+      return res.json({
+        success: true,
+        count: reports.length,
+        reports,
+      });
+    } catch (error) {
+      console.error('Get assigned reports error:', error.message);
+
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to fetch assigned reports right now.',
+      });
+    }
+  }
+);
+
+// 5. Get a single report by ID, including status-history user names
 router.get('/:id', async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid report ID.'
+        message: 'Invalid report ID.',
       });
     }
 
     const report = await Report.findById(req.params.id)
       .populate('reporter', 'name role')
       .populate('assignedVolunteer', 'name profileImage')
+      .populate('statusHistory.changedBy', 'name role')
       .lean();
 
     if (!report) {
       return res.status(404).json({
         success: false,
-        message: 'Report not found.'
+        message: 'Report not found.',
       });
     }
 
     return res.json({
       success: true,
-      report
+      report,
     });
   } catch (error) {
     console.error('Get report error:', error.message);
 
     return res.status(500).json({
       success: false,
-      message: 'Unable to fetch report right now.'
+      message: 'Unable to fetch report right now.',
     });
   }
 });
 
-
-/* Assign a volunteer to a verified report */
+// 6. Assign a volunteer to a verified report
 router.patch(
   '/:id/assign',
   protect,
@@ -258,7 +354,7 @@ router.patch(
   [
     body('volunteerId')
       .isMongoId()
-      .withMessage('A valid volunteer ID is required.')
+      .withMessage('A valid volunteer ID is required.'),
   ],
   validateRequest,
   async (req, res) => {
@@ -269,7 +365,7 @@ router.patch(
       if (!mongoose.isValidObjectId(id)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid report ID.'
+          message: 'Invalid report ID.',
         });
       }
 
@@ -278,29 +374,27 @@ router.patch(
       if (!report) {
         return res.status(404).json({
           success: false,
-          message: 'Report not found.'
+          message: 'Report not found.',
         });
       }
 
       if (report.status !== 'verified') {
         return res.status(400).json({
           success: false,
-          message: 'Only verified reports can be assigned.'
+          message: 'Only verified reports can be assigned.',
         });
       }
-
-      const User = (await import('../models/User.js')).default;
 
       const volunteer = await User.findOne({
         _id: volunteerId,
         role: 'volunteer',
-        isActive: true
+        isActive: true,
       });
 
       if (!volunteer) {
         return res.status(404).json({
           success: false,
-          message: 'Active volunteer not found.'
+          message: 'Active volunteer not found.',
         });
       }
 
@@ -310,29 +404,46 @@ router.patch(
       report.statusHistory.push({
         status: 'assigned',
         changedBy: req.user._id,
-        note: 'Volunteer assigned by administrator.'
+        note: 'Volunteer assigned by administrator.',
       });
 
       await report.save();
 
+      // Notify the assigned volunteer.
+      await createUserNotification({
+        recipient: volunteer._id,
+        report: report._id,
+        type: 'report-assigned',
+        title: 'New report assigned',
+        message: `You have been assigned the report "${report.title}".`,
+      });
+
+      // Notify the citizen who submitted the report.
+      await createUserNotification({
+        recipient: report.reporter,
+        report: report._id,
+        type: 'report-assigned',
+        title: 'Volunteer assigned',
+        message: `A volunteer has been assigned to your report "${report.title}".`,
+      });
+
       return res.json({
         success: true,
         message: 'Volunteer assigned successfully.',
-        report
+        report,
       });
     } catch (error) {
       console.error('Assign volunteer error:', error.message);
 
       return res.status(500).json({
         success: false,
-        message: 'Unable to assign volunteer right now.'
+        message: 'Unable to assign volunteer right now.',
       });
     }
   }
 );
 
-/* Update a report's status */
-console.log('Report status PATCH route registered');
+// 7. Update a report's status
 router.patch(
   '/:id/status',
   protect,
@@ -346,7 +457,7 @@ router.patch(
       .isString()
       .trim()
       .isLength({ max: 500 })
-      .withMessage('The note cannot exceed 500 characters.')
+      .withMessage('The note cannot exceed 500 characters.'),
   ],
   validateRequest,
   async (req, res) => {
@@ -357,7 +468,7 @@ router.patch(
       if (!mongoose.isValidObjectId(id)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid report ID.'
+          message: 'Invalid report ID.',
         });
       }
 
@@ -366,7 +477,7 @@ router.patch(
       if (!report) {
         return res.status(404).json({
           success: false,
-          message: 'Report not found.'
+          message: 'Report not found.',
         });
       }
 
@@ -380,7 +491,7 @@ router.patch(
       if (!isAdmin && !isAssignedVolunteer) {
         return res.status(403).json({
           success: false,
-          message: 'You cannot update this report.'
+          message: 'You cannot update this report.',
         });
       }
 
@@ -390,28 +501,32 @@ router.patch(
         assigned: ['in-progress', 'rejected'],
         'in-progress': ['resolved', 'rejected'],
         resolved: [],
-        rejected: []
+        rejected: [],
       };
 
-      if (isAssignedVolunteer &&
-          !['in-progress', 'resolved'].includes(status)) {
+      if (
+        isAssignedVolunteer &&
+        !['in-progress', 'resolved'].includes(status)
+      ) {
         return res.status(403).json({
           success: false,
-          message: 'Volunteers can only mark assigned reports in progress or resolved.'
+          message:
+            'Volunteers can only mark assigned reports in progress or resolved.',
         });
       }
 
       if (!allowedTransitions[report.status]?.includes(status)) {
         return res.status(400).json({
           success: false,
-          message: `Cannot change status from ${report.status} to ${status}.`
+          message: `Cannot change status from ${report.status} to ${status}.`,
         });
       }
 
       if (status === 'resolved' && !note.trim()) {
         return res.status(400).json({
           success: false,
-          message: 'Provide a resolution note before resolving the report.'
+          message:
+            'Provide a resolution note before resolving the report.',
         });
       }
 
@@ -425,26 +540,39 @@ router.patch(
       report.statusHistory.push({
         status,
         changedBy: req.user._id,
-        note: note.trim()
+        note: note.trim(),
       });
 
       await report.save();
 
+      // Notify the citizen about the report's new status.
+      const notification = getStatusNotification(
+        status,
+        report.title
+      );
+
+      if (notification) {
+        await createUserNotification({
+          recipient: report.reporter,
+          report: report._id,
+          ...notification,
+        });
+      }
+
       return res.json({
         success: true,
         message: 'Report status updated successfully.',
-        report
+        report,
       });
     } catch (error) {
       console.error('Update report status error:', error.message);
 
       return res.status(500).json({
         success: false,
-        message: 'Unable to update report status right now.'
+        message: 'Unable to update report status right now.',
       });
     }
   }
 );
-
 
 export default router;

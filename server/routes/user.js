@@ -2,8 +2,7 @@
 import { Router } from 'express';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
-import { protect } from '../middleware/authMiddleware.js';
-
+import { protect, requireRole } from '../middleware/authMiddleware.js';
 const router = Router();
 
 function validate(req, res, next) {
@@ -157,5 +156,32 @@ router.patch(
     }
   }
 );
+/* GET /api/users/volunteers
+   Admins can list active volunteers for report assignment.
+*/
+router.get('/volunteers', protect, requireRole('admin'), async (req, res) => {
+  try {
+    const volunteers = await User.find({
+      role: 'volunteer',
+      isActive: true,
+    })
+      .select('_id name email isAvailable categories')
+      .sort({ name: 1 })
+      .lean();
+
+    return res.json({
+      success: true,
+      count: volunteers.length,
+      volunteers,
+    });
+  } catch (error) {
+    console.error('Get volunteers error:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to fetch volunteers.',
+    });
+  }
+});
 
 export default router;

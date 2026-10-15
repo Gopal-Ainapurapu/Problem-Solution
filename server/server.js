@@ -5,7 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-
+import notificationRoutes from './routes/notification.js';
 import connectDB from './config/db.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
@@ -38,6 +38,7 @@ const authLimiter = rateLimit({
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -52,7 +53,7 @@ app.use(notFound);
 app.use(errorHandler);
 
 const httpServer = http.createServer(app);
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 connectDB()
   .then(() => {
