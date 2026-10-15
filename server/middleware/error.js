@@ -1,7 +1,12 @@
 export function notFound(req, res) {
-  res.status(404).json({ message: 'Route not found' });
-}
+  console.log('404:', req.method, req.originalUrl);
 
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+    path: req.originalUrl
+  });
+}
 export function errorHandler(err, req, res, next) {
   console.error(err);
   const status = err.status || 500;
