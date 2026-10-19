@@ -1,10 +1,13 @@
+
 import { Router } from 'express';
 import mongoose from 'mongoose';
 import { body, query, validationResult } from 'express-validator';
+import multer from 'multer';
 
 import Report from '../models/Report.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import cloudinary from '../config/cloudinary.js';
 
 import {
   protect,
@@ -12,6 +15,65 @@ import {
 } from '../middleware/authMiddleware.js';
 
 const router = Router();
+
+// Configure image uploads: maximum 5 images, 5 MB each.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 5,
+  },
+  fileFilter: (req, file, callback) => {
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ];
+
+    if (!allowedTypes.includes(file.mimetype)) {
+      return callback(
+        new Error('Only JPG, PNG, and WebP images are allowed.')
+      );
+    }
+
+    callback(null, true);
+  },
+});
+
+// Return a clear error when an uploaded file is invalid.
+function handleReportUploads(req, res, next) {
+  upload.array('images', 5)(req, res, (error) => {
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    next();
+  });
+}
+
+// Upload one image to Cloudinary and return its URL.
+function uploadImageToCloudinary(file) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'locallens/reports',
+        resource_type: 'image',
+      },
+      (error, result) => {
+        if (error) {
+          return reject(error);
+        }
+
+        resolve(result.secure_url);
+      }
+    );
+
+    stream.end(file.buffer);
+  });
+}
 
 // Create a notification without breaking a successful report operation.
 async function createUserNotification(notificationData) {
@@ -64,20 +126,21 @@ function getStatusNotification(status, title) {
   return notifications[status];
 }
 
-// 1. Create a community problem report
+// 1. Create a community problem report, optionally with images.
 router.post(
   '/',
   protect,
+  handleReportUploads,
   [
     body('title')
       .trim()
       .isLength({ min: 5, max: 120 })
-      .withMessage('Title must contain 5–120 characters.'),
+      .withMessage('Title must be between 5 and 120 characters.'),
 
     body('description')
       .trim()
       .isLength({ min: 10, max: 3000 })
-      .withMessage('Description must contain 10–3000 characters.'),
+      .withMessage('Description must be between 10 and 3000 characters.'),
 
     body('category')
       .isIn([
@@ -90,58 +153,83 @@ router.post(
         'public-safety',
         'other',
       ])
-      .withMessage('Invalid report category.'),
+      .withMessage('Please select a valid category.'),
 
-    body('location.coordinates')
-      .isArray({ min: 2, max: 2 })
-      .withMessage('Location must contain longitude and latitude.'),
+    body().custom((_, { req }) => {
+      const coordinates = req.body.location?.coordinates;
 
-    body('location.coordinates.*')
-      .isFloat()
-      .withMessage('Coordinates must be numbers.'),
+      const latitude =
+        req.body.latitude !== undefined
+          ? Number(req.body.latitude)
+          : Number(coordinates?.[1]);
+
+      const longitude =
+        req.body.longitude !== undefined
+          ? Number(req.body.longitude)
+          : Number(coordinates?.[0]);
+
+      if (
+        !Number.isFinite(latitude) ||
+        latitude < -90 ||
+        latitude > 90 ||
+        !Number.isFinite(longitude) ||
+        longitude < -180 ||
+        longitude > 180
+      ) {
+        throw new Error('Valid latitude and longitude are required.');
+      }
+
+      return true;
+    }),
 
     body('address')
       .optional()
-      .isString()
       .trim()
       .isLength({ max: 300 })
       .withMessage('Address cannot exceed 300 characters.'),
   ],
-  validateRequest,
   async (req, res) => {
+    const errors = validationResult(req);
+
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed.',
+        errors: errors.array(),
+      });
+    }
+
     try {
-      const {
-        title,
-        description,
-        category,
-        location,
-        address,
-      } = req.body;
+      // Accept either multipart latitude/longitude fields
+      // or the existing JSON location.coordinates format.
+      const coordinates = req.body.location?.coordinates;
 
-      const [longitude, latitude] = location.coordinates;
+      const latitude =
+        req.body.latitude !== undefined
+          ? Number(req.body.latitude)
+          : Number(coordinates?.[1]);
 
-      if (
-        longitude < -180 ||
-        longitude > 180 ||
-        latitude < -90 ||
-        latitude > 90
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid longitude or latitude.',
-        });
-      }
+      const longitude =
+        req.body.longitude !== undefined
+          ? Number(req.body.longitude)
+          : Number(coordinates?.[0]);
+
+      // Upload selected images to Cloudinary.
+      const images = await Promise.all(
+        (req.files || []).map(uploadImageToCloudinary)
+      );
 
       const report = await Report.create({
         reporter: req.user._id,
-        title,
-        description,
-        category,
+        title: req.body.title.trim(),
+        description: req.body.description.trim(),
+        category: req.body.category,
         location: {
           type: 'Point',
           coordinates: [longitude, latitude],
         },
-        address,
+        address: req.body.address?.trim() || '',
+        images,
         status: 'pending',
         statusHistory: [
           {
@@ -152,22 +240,21 @@ router.post(
         ],
       });
 
-      // Notify the citizen that their report was submitted.
       await createUserNotification({
         recipient: req.user._id,
-        report: report._id,
         type: 'report-submitted',
-        title: 'Report submitted successfully',
-        message: `Your report "${report.title}" has been submitted and is awaiting review.`,
+        title: 'Report submitted',
+        message: `Your report "${report.title}" has been submitted.`,
+        report: report._id,
       });
 
       return res.status(201).json({
         success: true,
-        message: 'Community report created successfully.',
+        message: 'Report submitted successfully.',
         report,
       });
     } catch (error) {
-      console.error('Create report error:', error.message);
+      console.error('Create report error:', error);
 
       return res.status(500).json({
         success: false,
@@ -177,7 +264,7 @@ router.post(
   }
 );
 
-// 2. Get reports with optional filters and pagination
+// 2. Get reports with optional filters and pagination.
 router.get(
   '/',
   [
@@ -213,7 +300,6 @@ router.get(
     try {
       const page = Number(req.query.page || 1);
       const limit = Number(req.query.limit || 10);
-
       const filters = {};
 
       if (req.query.category) {
@@ -231,7 +317,6 @@ router.get(
           .skip((page - 1) * limit)
           .limit(limit)
           .lean(),
-
         Report.countDocuments(filters),
       ]);
 
@@ -256,7 +341,7 @@ router.get(
   }
 );
 
-// 3. Get reports created by the logged-in user
+// 3. Get reports created by the logged-in user.
 router.get('/mine', protect, async (req, res) => {
   try {
     const reports = await Report.find({
@@ -280,7 +365,7 @@ router.get('/mine', protect, async (req, res) => {
   }
 });
 
-// 4. Get reports assigned to the logged-in volunteer
+// 4. Get reports assigned to the logged-in volunteer.
 router.get(
   '/assigned',
   protect,
@@ -309,7 +394,186 @@ router.get(
   }
 );
 
-// 5. Get a single report by ID, including status-history user names
+/* GET /api/reports/analytics
+   Admin-only statistics calculated from the entire reports collection.
+*/
+router.get(
+  '/analytics',
+  protect,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const now = new Date();
+      const currentMonth = new Date(
+        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)
+      );
+
+      // Include the current month and previous five months.
+      const firstMonth = new Date(
+        Date.UTC(
+          currentMonth.getUTCFullYear(),
+          currentMonth.getUTCMonth() - 5,
+          1
+        )
+      );
+
+      const [
+        totalReports,
+        statusCounts,
+        categoryCounts,
+        monthlyResults,
+        resolutionResults,
+      ] = await Promise.all([
+        Report.countDocuments(),
+
+        Report.aggregate([
+          {
+            $group: {
+              _id: '$status',
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+
+        Report.aggregate([
+          {
+            $group: {
+              _id: '$category',
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { count: -1 } },
+        ]),
+
+        Report.aggregate([
+          {
+            $match: {
+              createdAt: { $gte: firstMonth },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                year: { $year: '$createdAt' },
+                month: { $month: '$createdAt' },
+              },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } },
+        ]),
+
+        Report.aggregate([
+          {
+            $match: {
+              status: 'resolved',
+              resolvedAt: { $ne: null },
+              createdAt: { $ne: null },
+            },
+          },
+          {
+            $project: {
+              resolutionHours: {
+                $divide: [
+                  { $subtract: ['$resolvedAt', '$createdAt'] },
+                  1000 * 60 * 60,
+                ],
+              },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              averageHours: { $avg: '$resolutionHours' },
+              resolvedCount: { $sum: 1 },
+            },
+          },
+        ]),
+      ]);
+
+      const statuses = [
+        'pending',
+        'verified',
+        'assigned',
+        'in-progress',
+        'resolved',
+        'rejected',
+      ];
+
+      const statusMap = Object.fromEntries(
+        statusCounts.map((item) => [item._id, item.count])
+      );
+
+      const monthlyMap = new Map(
+        monthlyResults.map((item) => [
+          `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
+          item.count,
+        ])
+      );
+
+      const monthlyReports = [];
+
+      for (let offset = 0; offset < 6; offset += 1) {
+        const date = new Date(
+          Date.UTC(
+            firstMonth.getUTCFullYear(),
+            firstMonth.getUTCMonth() + offset,
+            1
+          )
+        );
+
+        const key = `${date.getUTCFullYear()}-${String(
+          date.getUTCMonth() + 1
+        ).padStart(2, '0')}`;
+
+        monthlyReports.push({
+          month: key,
+          reports: monthlyMap.get(key) || 0,
+        });
+      }
+
+      const resolution = resolutionResults[0] || {
+        averageHours: null,
+        resolvedCount: 0,
+      };
+
+      return res.json({
+        success: true,
+        analytics: {
+          totalReports,
+          statusCounts: Object.fromEntries(
+            statuses.map((status) => [
+              status,
+              statusMap[status] || 0,
+            ])
+          ),
+          categoryCounts: categoryCounts.map((item) => ({
+            category: item._id,
+            count: item.count,
+          })),
+          monthlyReports,
+          resolution: {
+            resolvedCount: resolution.resolvedCount,
+            averageHours:
+              resolution.averageHours === null
+                ? null
+                : Math.round(resolution.averageHours * 100) / 100,
+          },
+          generatedAt: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      console.error('Report analytics error:', error);
+
+      return res.status(500).json({
+        success: false,
+        message: 'Unable to load report analytics.',
+      });
+    }
+  }
+);
+
+// 5. Get a single report by ID, including status-history user names.
 router.get('/:id', async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
@@ -346,7 +610,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 6. Assign a volunteer to a verified report
+// 6. Assign a volunteer to a verified report.
 router.patch(
   '/:id/assign',
   protect,
@@ -409,7 +673,6 @@ router.patch(
 
       await report.save();
 
-      // Notify the assigned volunteer.
       await createUserNotification({
         recipient: volunteer._id,
         report: report._id,
@@ -418,7 +681,6 @@ router.patch(
         message: `You have been assigned the report "${report.title}".`,
       });
 
-      // Notify the citizen who submitted the report.
       await createUserNotification({
         recipient: report.reporter,
         report: report._id,
@@ -443,7 +705,7 @@ router.patch(
   }
 );
 
-// 7. Update a report's status
+// 7. Update a report's status.
 router.patch(
   '/:id/status',
   protect,
@@ -545,7 +807,6 @@ router.patch(
 
       await report.save();
 
-      // Notify the citizen about the report's new status.
       const notification = getStatusNotification(
         status,
         report.title

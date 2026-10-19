@@ -87,6 +87,12 @@ export default function ReportDetails() {
     ? [...report.statusHistory].reverse()
     : [];
 
+  const images = Array.isArray(report.images)
+    ? report.images.filter(
+        (image) => typeof image === 'string' && image.trim()
+      )
+    : [];
+
   return (
     <main style={pageStyle}>
       <Link to="/reports" style={linkStyle}>
@@ -127,6 +133,43 @@ export default function ReportDetails() {
             <p>{report.address || 'Not provided'}</p>
           </div>
         </div>
+
+        {/* Report image gallery */}
+        <section style={gallerySectionStyle}>
+          <h2 style={{ marginBottom: 8 }}>Report Photos</h2>
+
+          {images.length === 0 ? (
+            <p style={mutedStyle}>
+              No photos have been uploaded for this report.
+            </p>
+          ) : (
+            <>
+              <p style={mutedStyle}>
+                {images.length} photo{images.length !== 1 ? 's' : ''}
+              </p>
+
+              <div style={galleryGridStyle}>
+                {images.map((image, index) => (
+                  <a
+                    key={`${image}-${index}`}
+                    href={image}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open full-size photo in a new tab"
+                    style={imageLinkStyle}
+                  >
+                    <img
+                      src={image}
+                      alt={`Report photo ${index + 1}`}
+                      loading="lazy"
+                      style={galleryImageStyle}
+                    />
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
 
         {report.resolutionNote && (
           <div style={resolutionStyle}>
@@ -253,6 +296,34 @@ const statusStyle = (status) => ({
   fontSize: 13,
   fontWeight: 700,
 });
+
+const gallerySectionStyle = {
+  marginTop: 28,
+  paddingTop: 20,
+  borderTop: '1px solid #e2e8f0',
+};
+
+const galleryGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+  gap: 12,
+  marginTop: 16,
+};
+
+const imageLinkStyle = {
+  display: 'block',
+  overflow: 'hidden',
+  borderRadius: 10,
+  border: '1px solid #e2e8f0',
+  background: '#f8fafc',
+};
+
+const galleryImageStyle = {
+  display: 'block',
+  width: '100%',
+  height: 180,
+  objectFit: 'cover',
+};
 
 const resolutionStyle = {
   marginTop: 20,

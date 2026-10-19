@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -5,76 +6,84 @@ import api from '../api';
 import './CitizenDashboard.css';
 
 const STATUS_OPTIONS = [
-  'all', 'pending', 'verified', 'assigned',
-  'in-progress', 'resolved', 'rejected',
+  'all',
+  'pending',
+  'verified',
+  'assigned',
+  'in-progress',
+  'resolved',
+  'rejected',
 ];
 
-const formatStatus = (status) =>
-  status === 'in-progress'
-    ? 'In Progress'
-    : status.charAt(0).toUpperCase() + status.slice(1);
+const formatStatus = (status) => {
+  if (!status) return 'Unknown';
+
+  return status
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+const formatCategory = (category) => {
+  if (!category) return 'Other';
+
+  return category
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
 
 export default function CitizenDashboard() {
   const [reports, setReports] = useState([]);
   const [filter, setFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
-  const loadReports = useCallback(async () => {
+  const loadReports = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
       const response = await api.get('/reports/mine');
-      setReports(response.data.reports || []);
+      const data = response.data;
+
+      const reportList = Array.isArray(data?.reports)
+        ? data.reports
+        : Array.isArray(data)
+          ? data
+          : [];
+
+      setReports(reportList);
+      setLoadError(false);
     } catch (error) {
+      setLoadError(true);
+
       toast.error(
         error.response?.data?.message ||
           'Unable to load your reports'
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const fetchInitialReports = async () => {
-      try {
-        const response = await api.get('/reports/mine');
-
-        if (!cancelled) {
-          setReports(response.data.reports || []);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          toast.error(
-            error.response?.data?.message ||
-              'Unable to load your reports'
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    fetchInitialReports();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleRefresh = () => {
-    setLoading(true);
     loadReports();
-  };
+  }, [loadReports]);
 
   const counts = useMemo(
     () => ({
       total: reports.length,
-      pending: reports.filter((r) => r.status === 'pending').length,
-      inProgress: reports.filter(
-        (r) => ['assigned', 'in-progress'].includes(r.status)
+      pending: reports.filter((report) => report.status === 'pending').length,
+      inProgress: reports.filter((report) =>
+        ['assigned', 'in-progress'].includes(report.status)
       ).length,
-      resolved: reports.filter((r) => r.status === 'resolved').length,
+      resolved: reports.filter((report) => report.status === 'resolved').length,
     }),
     [reports]
   );
@@ -90,7 +99,10 @@ export default function CitizenDashboard() {
   return (
     <main className="citizen-dashboard">
       <header className="citizen-header">
-        <Link to="/" className="citizen-home-link">← Home</Link>
+        <Link to="/" className="citizen-home-link">
+          ← Home
+        </Link>
+
         <p className="citizen-eyebrow">LOCALLENS / CITIZEN</p>
         <h1>My Dashboard</h1>
         <p>Track the local issues you have reported to your community.</p>
@@ -130,8 +142,12 @@ export default function CitizenDashboard() {
               ))}
             </select>
 
-            <button onClick={handleRefresh} disabled={loading}>
-              {loading ? 'Loading...' : 'Refresh'}
+            <button
+              type="button"
+              onClick={() => loadReports(true)}
+              disabled={loading || refreshing}
+            >
+              {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
 
             <Link to="/reports/new">+ New Report</Link>
@@ -140,6 +156,18 @@ export default function CitizenDashboard() {
 
         {loading ? (
           <p className="citizen-message">Loading your reports...</p>
+        ) : loadError ? (
+          <div className="citizen-empty">
+            <h3>Couldn't load your reports</h3>
+            <p>Check your connection and try again.</p>
+            <button
+              type="button"
+              onClick={() => loadReports()}
+              disabled={refreshing}
+            >
+              Try again
+            </button>
+          </div>
         ) : visibleReports.length === 0 ? (
           <div className="citizen-empty">
             <h3>No reports found</h3>
@@ -156,21 +184,23 @@ export default function CitizenDashboard() {
               <article className="citizen-report-card" key={report._id}>
                 <div className="citizen-report-top">
                   <div>
-                    <h3>{report.title}</h3>
+                    <h3>{report.title || 'Untitled report'}</h3>
                     <p className="citizen-report-category">
-                      {formatStatus(report.category)}
+                      {formatCategory(report.category)}
                     </p>
                   </div>
 
                   <span
-                    className={`citizen-status citizen-status-${report.status}`}
+                    className={`citizen-status citizen-status-${
+                      report.status || 'unknown'
+                    }`}
                   >
                     {formatStatus(report.status)}
                   </span>
                 </div>
 
                 <p className="citizen-report-description">
-                  {report.description}
+                  {report.description || 'No description provided.'}
                 </p>
 
                 {report.address && (
