@@ -1,0 +1,299 @@
+/* ==========================================================================
+   VolunteerDashboard.css — Modern Classic Volunteer Dashboard Styles
+   ========================================================================== */
+
+.volunteer-page {
+  min-height: 100vh;
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
+.volunteer-dashboard {
+  width: min(1200px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 36px 0 64px;
+}
+
+.volunteer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.volunteer-header-copy {
+  max-width: 680px;
+}
+
+.volunteer-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.volunteer-header h1 {
+  margin: 0 0 8px;
+  font-family: var(--font-heading);
+  font-size: clamp(1.85rem, 3.2vw, 2.4rem);
+  font-weight: 800;
+  color: var(--color-text);
+  letter-spacing: -0.03em;
+}
+
+.volunteer-header-description {
+  margin: 0;
+  color: var(--color-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.volunteer-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 4 Summary Stat Cards */
+.volunteer-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.volunteer-stat-card {
+  padding: 22px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transition);
+}
+
+.volunteer-stat-card:hover {
+  border-color: var(--color-border-hover);
+}
+
+.volunteer-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.volunteer-stat-label {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.volunteer-stat-icon {
+  font-size: 18px;
+}
+
+.volunteer-stat-value {
+  margin: 0 0 4px;
+  font-family: var(--font-heading);
+  font-size: clamp(1.75rem, 2.8vw, 2.2rem);
+  font-weight: 850;
+  color: var(--color-text);
+  line-height: 1.15;
+}
+
+.volunteer-stat-note {
+  margin: 0;
+  color: var(--color-secondary);
+  font-size: 12px;
+}
+
+/* Search and Filter Bar */
+.volunteer-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 28px;
+  padding: 16px 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.volunteer-search-box {
+  width: 100%;
+}
+
+.volunteer-filter-pills {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Tasks Grid */
+.volunteer-tasks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 20px;
+}
+
+.volunteer-task-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  transition: all var(--transition);
+}
+
+.volunteer-task-card:hover {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
+}
+
+.task-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.task-category-pill {
+  padding: 4px 10px;
+  background: var(--color-soft-green);
+  border-radius: var(--radius-xs);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.task-title-link {
+  text-decoration: none;
+}
+
+.task-title {
+  margin: 0 0 10px;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 750;
+  color: var(--color-text);
+  line-height: 1.35;
+  transition: color var(--transition);
+}
+
+.task-title-link:hover .task-title {
+  color: var(--color-primary);
+}
+
+.task-description {
+  margin: 0 0 16px;
+  color: var(--color-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.task-info-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: #FAF9F6;
+  border-radius: var(--radius-sm);
+  margin-bottom: 18px;
+  font-size: 13px;
+}
+
+.task-info-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.info-label {
+  color: var(--color-secondary);
+  font-weight: 600;
+}
+
+.info-val {
+  color: var(--color-text);
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.task-resolution-box {
+  padding: 10px 14px;
+  background: #F3FAF5;
+  border: 1px solid #C8E6D3;
+  border-radius: var(--radius-sm);
+  color: #1C5D3D;
+  font-size: 13px;
+  line-height: 1.45;
+  margin-bottom: 16px;
+}
+
+.task-card-actions {
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+}
+
+.task-resolve-form {
+  padding: 12px;
+  background: #FAF9F5;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.task-completed-label {
+  color: var(--color-success);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .volunteer-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .volunteer-stats {
+    grid-template-columns: 1fr;
+  }
+  .volunteer-tasks-grid {
+    grid-template-columns: 1fr;
+  }
+  .volunteer-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

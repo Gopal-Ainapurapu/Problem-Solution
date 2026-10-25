@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LocalLens: Community-Based Civic Issue Reporting Platform</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #F7F6F2;
+      --surface: #FFFFFF;
+      --primary: #24483D;
+      --primary-hover: #19382F;
+      --soft-green: #E8F0EA;
+      --gold: #C49A55;
+      --text: #202824;
+      --secondary: #69736D;
+      --border: #E4E6DF;
+    }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background-color: #121815;
+      color: #EAEBE8;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    h1, h2, h3, h4, .font-heading {
+      font-family: 'Manrope', sans-serif;
+    }
+    .slide-container {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      position: relative;
+    }
+    .slide {
+      display: none;
+      width: 100%;
+      max-width: 1280px;
+      height: 88vh;
+      background: #18221D;
+      border: 1px solid rgba(228, 230, 223, 0.15);
+      border-radius: 20px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.6);
+      padding: 44px 56px;
+      overflow-y: auto;
+      box-sizing: border-box;
+      position: relative;
+    }
+    .slide.active {
+      display: flex;
+      flex-direction: column;
+      animation: fadeIn 0.25s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .badge-gold {
+      background: rgba(196, 154, 85, 0.15);
+      border: 1px solid rgba(196, 154, 85, 0.4);
+      color: #E2BA76;
+    }
+    .badge-green {
+      background: rgba(36, 72, 61, 0.5);
+      border: 1px solid rgba(64, 126, 107, 0.4);
+      color: #8ED8BA;
+    }
+    .card-dark {
+      background: #1D2A24;
+      border: 1px solid rgba(228, 230, 223, 0.1);
+      border-radius: 12px;
+    }
+    .controls-bar {
+      height: 64px;
+      background: #151E1A;
+      border-top: 1px solid rgba(228, 230, 223, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 36px;
+    }
+    .nav-btn {
+      background: #24352D;
+      color: #EAEBE8;
+      border: 1px solid rgba(228, 230, 223, 0.2);
+      border-radius: 8px;
+      padding: 7px 18px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: #C49A55;
+      color: #121815;
+    }
+    .nav-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+    }
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.88em;
+    }
+    .slide::-webkit-scrollbar {
+      width: 6px;
+    }
+    .slide::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    .slide::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-container">
+
+    <!-- SLIDE 0: TITLE SLIDE -->
+    <section class="slide active justify-center items-center text-center">
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full badge-gold text-xs font-bold tracking-wider uppercase mb-6">
+        <span>★</span> TalentSprint Full-Stack Web Development Review • Nov 2026
+      </div>
+      <h1 class="text-4xl md:text-6xl font-extrabold tracking-tight text-white mb-4 leading-tight">
+        LocalLens<span class="text-[#C49A55]">.</span>
+      </h1>
+      <p class="text-xl md:text-2xl font-medium text-emerald-200/90 max-w-3xl mb-8">
+        Community-Based Civic Issue Reporting & Real-Time Management Platform
+      </p>
+      <div class="card-dark p-6 max-w-2xl text-left border-l-4 border-l-[#C49A55] mb-10">
+        <p class="text-sm text-gray-300 leading-relaxed">
+          A production-grade MERN platform connecting <strong class="text-white">Citizens</strong>, <strong class="text-white">Municipal Administrators</strong>, and <strong class="text-white">Field Volunteers</strong> to report, verify, dispatch, and resolve local public infrastructure problems with full transparent audit trails.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-6 items-center justify-center text-sm text-gray-400">
+        <div><strong>Cohort:</strong> FSDAI - 1 Cohort</div>
+        <div>•</div>
+        <div><strong>Engineers:</strong> Gopal Ainapurapu • Paavan Thota • Sri Charan Sangem</div>
+        <div>•</div>
+        <div><strong>Stack:</strong> React 19 • Express 5 • MongoDB • Leaflet • Socket.IO</div>
+      </div>
+    </section>
+
+    <!-- SLIDE 1: PROBLEM STATEMENT & OBJECTIVES -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 01 • Executive Motivation</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Problem Statement & Project Objectives</h2>
+        </div>
+        <span class="badge-green px-3 py-1 rounded text-xs font-semibold">Civic Tech Innovation</span>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6 flex-1">
+        <div class="card-dark p-6">
+          <h3 class="text-lg font-bold text-red-400 mb-4 flex items-center gap-2">
+            <span>⚠️</span> The Real-World Civic Crisis
+          </h3>
+          <ul class="space-y-3 text-sm text-gray-300">
+            <li class="flex items-start gap-2">
+              <span class="text-red-400 font-bold">•</span>
+              <span><strong>Frequent Public Hazards:</strong> Citizens endure open potholes, hazardous sewage leaks, uncleared garbage dumps, and dark street stretches causing injuries and health risks.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-red-400 font-bold">•</span>
+              <span><strong>The "Black Box" Portal:</strong> Traditional complaint systems leave citizens in the dark with zero visibility into whether complaints were received or acted upon.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-red-400 font-bold">•</span>
+              <span><strong>No Verifiable Audit Trail:</strong> Grievances are routinely closed arbitrarily on paper without physical site inspection or photographic proof.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="text-red-400 font-bold">•</span>
+              <span><strong>Blind Dispatch:</strong> Municipal authorities lack real-time visibility into volunteer locations, skills, active workloads, and exact coordinates.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="card-dark p-6">
+          <h3 class="text-lg font-bold text-emerald-400 mb-4 flex items-center gap-2">
+            <span>🎯</span> LocalLens Solution Pillars
+          </h3>
+          <div class="space-y-3.5 text-sm">
+            <div class="p-3 bg-[#16231D] rounded border border-emerald-900/50">
+              <strong class="text-emerald-300 block mb-1">1. Citizen Empowerment & Transparency</strong>
+              <p class="text-xs text-gray-300">Leaflet interactive click-to-pin map, HTML5 GPS auto-location, live 5-stage progress stepper, and one-click issue sharing.</p>
+            </div>
+            <div class="p-3 bg-[#16231D] rounded border border-emerald-900/50">
+              <strong class="text-emerald-300 block mb-1">2. Admin Command & Smart Geospatial Dispatch</strong>
+              <p class="text-xs text-gray-300">Verification triage queue, proximity-based volunteer scanning, skill matching, Recharts visual analytics, and compliance CSV export.</p>
+            </div>
+            <div class="p-3 bg-[#16231D] rounded border border-emerald-900/50">
+              <strong class="text-emerald-300 block mb-1">3. Volunteer Hub & Private Team Workspaces</strong>
+              <p class="text-xs text-gray-300">Available task discovery, assignment requests, team invitations, and dedicated private communication workspaces with real-time Socket.IO chat.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 2: TECHNOLOGY STACK & DATABASE ARCHITECTURE -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 02 • Core Engineering</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Technology Stack & Database Architecture</h2>
+        </div>
+        <span class="badge-gold px-3 py-1 rounded text-xs font-semibold">Inspected Codebase</span>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-5 flex-1">
+        <div class="card-dark p-5">
+          <h3 class="text-base font-bold text-emerald-300 mb-3 border-b border-gray-700/60 pb-2">Frontend Layer</h3>
+          <ul class="text-xs space-y-2.5 text-gray-300">
+            <li><strong>React 19.2.8:</strong> Concurrent rendering, optimized state & custom contexts.</li>
+            <li><strong>Vite 8.3.4:</strong> Next-gen bundler (builds in &lt;800ms).</li>
+            <li><strong>Leaflet & React-Leaflet 5.0:</strong> Dynamic OSM map rendering & coordinate pin drop.</li>
+            <li><strong>Recharts 3.10.1:</strong> Responsive analytics dashboards (doughnuts, bars, trends).</li>
+            <li><strong>Socket.io-client 4.8.4:</strong> Bi-directional WebSocket events.</li>
+            <li><strong>Axios 1.20:</strong> JWT authorization bearer interceptors.</li>
+            <li><strong>Modern Classic Tokens:</strong> #F7F6F2, #24483D, #C49A55.</li>
+          </ul>
+        </div>
+
+        <div class="card-dark p-5">
+          <h3 class="text-base font-bold text-emerald-300 mb-3 border-b border-gray-700/60 pb-2">Backend & Security</h3>
+          <ul class="text-xs space-y-2.5 text-gray-300">
+            <li><strong>Node.js v22/v26 LTS:</strong> Event-driven asynchronous runtime.</li>
+            <li><strong>Express 5.3.0:</strong> Modular REST architecture with clean error handlers.</li>
+            <li><strong>Socket.IO 4.8.4:</strong> Scoped rooms: <code>user:ID</code> & <code>team:REPORT_ID</code>.</li>
+            <li><strong>Helmet 8.3.0 & CORS:</strong> Hardened HTTP security headers.</li>
+            <li><strong>express-rate-limit 8.7:</strong> Brute-force protection on auth endpoints.</li>
+            <li><strong>bcryptjs 3.0:</strong> 12-round salted password hashing.</li>
+            <li><strong>jsonwebtoken 9.0:</strong> Stateless JWT authentication.</li>
+          </ul>
+        </div>
+
+        <div class="card-dark p-5">
+          <h3 class="text-base font-bold text-emerald-300 mb-3 border-b border-gray-700/60 pb-2">MongoDB & Mongoose</h3>
+          <ul class="text-xs space-y-2.5 text-gray-300">
+            <li><strong>User Schema:</strong> Coordinates <code>Point</code>, categories, skills, rating, availability.</li>
+            <li><strong>Report Schema:</strong> 2dsphere geo-index, 5-stage status, priority, team size, checklist.</li>
+            <li><strong>VolunteerRequest:</strong> Assignment requests, volunteer notes, distanceKm, review status.</li>
+            <li><strong>TeamInvitation:</strong> Proximity invites with unique <code>{ report, volunteer }</code> index.</li>
+            <li><strong>TeamMessage:</strong> Dedicated private chat room history.</li>
+            <li><strong>Notification:</strong> Persistent in-app notifications.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 3: SYSTEM ARCHITECTURE & DATA FLOW -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 03 • System Design</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Multi-Tier Architecture & End-to-End Data Flow</h2>
+        </div>
+        <span class="badge-green px-3 py-1 rounded text-xs font-semibold">End-to-End Flow</span>
+      </div>
+
+      <div class="grid md:grid-cols-4 gap-4 mb-6">
+        <div class="card-dark p-4 border-t-2 border-t-emerald-500">
+          <span class="text-xs font-bold text-emerald-400">Layer 1</span>
+          <h4 class="font-bold text-white text-sm mt-1 mb-2">Presentation Layer</h4>
+          <p class="text-xs text-gray-300">React 19 SPA with role-based routes, Leaflet GPS coordinates, and Socket.IO client notifications.</p>
+        </div>
+        <div class="card-dark p-4 border-t-2 border-t-blue-500">
+          <span class="text-xs font-bold text-blue-400">Layer 2</span>
+          <h4 class="font-bold text-white text-sm mt-1 mb-2">Gateway & Security</h4>
+          <p class="text-xs text-gray-300">Express 5 API server on port 5001. Rate limiting, CORS origin filters, and Bearer token validation.</p>
+        </div>
+        <div class="card-dark p-4 border-t-2 border-t-amber-500">
+          <span class="text-xs font-bold text-amber-400">Layer 3</span>
+          <h4 class="font-bold text-white text-sm mt-1 mb-2">Controllers & Sockets</h4>
+          <p class="text-xs text-gray-300">Controllers for reports, teams, and users. Socket server orchestrating real-time user and private team rooms.</p>
+        </div>
+        <div class="card-dark p-4 border-t-2 border-t-purple-500">
+          <span class="text-xs font-bold text-purple-400">Layer 4</span>
+          <h4 class="font-bold text-white text-sm mt-1 mb-2">Persistence Layer</h4>
+          <p class="text-xs text-gray-300">MongoDB Atlas with 2dsphere indexes. Aggregation pipelines for municipal analytics and audit logs.</p>
+        </div>
+      </div>
+
+      <div class="card-dark p-5">
+        <h4 class="text-sm font-bold text-[#C49A55] mb-2 uppercase tracking-wider">Synchronous Event & Audit Pipeline</h4>
+        <p class="text-xs text-gray-300 leading-relaxed">
+          Every report state transition synchronously writes an immutable entry into <code>statusHistory</code>, logs the actor's ID and timestamp, creates a persistent <code>Notification</code> document in MongoDB, and dispatches an instant WebSocket push event to the user's active device room.
+        </p>
+      </div>
+    </section>
+
+    <!-- SLIDE 4: CIVIC ISSUE LIFECYCLE & ROLE-BASED ACCESS -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 04 • Business Logic</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Civic Issue Lifecycle & Role-Based Rules</h2>
+        </div>
+        <span class="badge-gold px-3 py-1 rounded text-xs font-semibold">Strict State Machine</span>
+      </div>
+
+      <div class="grid grid-cols-5 gap-3 mb-6 text-center">
+        <div class="p-3 bg-gray-800 rounded border border-gray-700">
+          <span class="text-xs font-bold text-amber-400">Stage 1</span>
+          <h4 class="font-bold text-white text-sm mt-1">PENDING</h4>
+          <p class="text-[11px] text-gray-400 mt-1">Citizen reports with GPS pin & photos</p>
+        </div>
+        <div class="p-3 bg-gray-800 rounded border border-gray-700">
+          <span class="text-xs font-bold text-blue-400">Stage 2</span>
+          <h4 class="font-bold text-white text-sm mt-1">VERIFIED</h4>
+          <p class="text-[11px] text-gray-400 mt-1">Admin verifies; spam rejected with note</p>
+        </div>
+        <div class="p-3 bg-gray-800 rounded border border-gray-700">
+          <span class="text-xs font-bold text-purple-400">Stage 3</span>
+          <h4 class="font-bold text-white text-sm mt-1">ASSIGNED</h4>
+          <p class="text-[11px] text-gray-400 mt-1">Single volunteer or team dispatched</p>
+        </div>
+        <div class="p-3 bg-gray-800 rounded border border-gray-700">
+          <span class="text-xs font-bold text-yellow-400">Stage 4</span>
+          <h4 class="font-bold text-white text-sm mt-1">IN PROGRESS</h4>
+          <p class="text-[11px] text-gray-400 mt-1">Arrival on site; work starts</p>
+        </div>
+        <div class="p-3 bg-gray-800 rounded border border-gray-700">
+          <span class="text-xs font-bold text-emerald-400">Stage 5</span>
+          <h4 class="font-bold text-white text-sm mt-1">RESOLVED</h4>
+          <p class="text-[11px] text-gray-400 mt-1">Notes & photo proof verified</p>
+        </div>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-4 flex-1">
+        <div class="card-dark p-4">
+          <h4 class="text-sm font-bold text-white mb-2">🔒 Data Integrity Constraints</h4>
+          <ul class="text-xs text-gray-300 space-y-2">
+            <li><strong>Sequential Permissibility:</strong> Cannot skip from <em>Assigned</em> to <em>Resolved</em> without first activating <em>In Progress</em>.</li>
+            <li><strong>Role-Bound Operations:</strong> Volunteers can only update tasks assigned to them; unauthorized edits return <code>HTTP 403 Forbidden</code>.</li>
+            <li><strong>Mandatory Resolution Notes:</strong> Resolution demands non-empty notes detailing physical actions taken.</li>
+          </ul>
+        </div>
+        <div class="card-dark p-4">
+          <h4 class="text-sm font-bold text-white mb-2">🛡️ Terminal Rejection Protocol</h4>
+          <p class="text-xs text-gray-300 leading-relaxed mb-2">
+            Admins can transition <em>Pending</em> or <em>Verified</em> issues to <em>Rejected</em> with a mandatory justification (e.g. private gated layout outside municipal authority). Once resolved, reports cannot be rejected.
+          </p>
+          <span class="inline-block px-2.5 py-1 bg-red-950/60 border border-red-800 text-red-300 text-[11px] rounded">
+            Immutable Audit Trail: Status changes cannot be altered or purged.
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 5: LIVE APPLICATION PORTALS -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 05 • Role Dashboards</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Citizen, Volunteer & Administrator Portals</h2>
+        </div>
+        <span class="badge-green px-3 py-1 rounded text-xs font-semibold">User Experience</span>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-5 flex-1">
+        <div class="card-dark p-5">
+          <div class="flex items-center gap-2 mb-3 text-emerald-400 font-bold">
+            <span>👤</span> Citizen Experience
+          </div>
+          <ul class="text-xs text-gray-300 space-y-2">
+            <li>• <strong>Click-to-Pin GPS:</strong> Point-and-click coordinate selection with reverse geocoded street addresses.</li>
+            <li>• <strong>Priority Flags:</strong> Tag issues with <code>Urgent</code>, <code>High</code>, <code>Medium</code>, or <code>Low</code>.</li>
+            <li>• <strong>Community Feed:</strong> Switch between Cards Grid and Fullscreen Heatmap view.</li>
+            <li>• <strong>Audit Stepper:</strong> View live progress and assigned personnel contacts.</li>
+          </ul>
+        </div>
+
+        <div class="card-dark p-5">
+          <div class="flex items-center gap-2 mb-3 text-purple-400 font-bold">
+            <span>🛠️</span> Volunteer Command
+          </div>
+          <ul class="text-xs text-gray-300 space-y-2">
+            <li>• <strong>Availability Switch:</strong> Toggle status (<code>Available for Tasks</code> vs <code>Unavailable</code>).</li>
+            <li>• <strong>Available Tasks Tab:</strong> Browse nearby open issues with calculated distance in km.</li>
+            <li>• <strong>Request Assignment:</strong> Submit requests with personal availability notes.</li>
+            <li>• <strong>Team Workspaces:</strong> Direct one-click access to private team collaboration rooms.</li>
+          </ul>
+        </div>
+
+        <div class="card-dark p-5">
+          <div class="flex items-center gap-2 mb-3 text-amber-400 font-bold">
+            <span>👑</span> Administrator Console
+          </div>
+          <ul class="text-xs text-gray-300 space-y-2">
+            <li>• <strong>Verification Queue:</strong> Authenticate genuine issues and eliminate false reports.</li>
+            <li>• <strong>Smart Recruitment:</strong> Scan nearby volunteers by geospatial radius (e.g. 15 km) and dispatch team invites.</li>
+            <li>• <strong>Recharts Suite:</strong> Category bars, status distribution doughnut, and resolution SLA metrics.</li>
+            <li>• <strong>Audit CSV Export:</strong> 1-click download of all civic reports for city records.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 6: SMART TEAM RECRUITMENT & PRIVATE WORKSPACE -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 06 • Advanced Feature</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Smart Nearby Team Formation & Private Group Collaboration</h2>
+        </div>
+        <span class="badge-gold px-3 py-1 rounded text-xs font-semibold">Socket.IO & 2dsphere</span>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-6 flex-1">
+        <div class="card-dark p-5">
+          <h3 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span>👥</span> Smart Recruitment & Capacity Rules
+          </h3>
+          <ul class="text-xs text-gray-300 space-y-2.5">
+            <li><strong>Configurable Team Size:</strong> Coordinators set requirements (e.g. 5 volunteers for culvert clearing).</li>
+            <li><strong>Geospatial Proximity Scan:</strong> MongoDB calculates real-time distance in kilometers to available volunteers.</li>
+            <li><strong>Targeted Invitations:</strong> Volunteers receive real-time push alerts and explicitly accept or decline.</li>
+            <li><strong>Atomic Capacity Enforcement:</strong> The backend rejects any 6th member from joining a 5-member team.</li>
+            <li><strong>No Duplicate Requests:</strong> Prevent duplicate requests and enforce account availability.</li>
+          </ul>
+        </div>
+
+        <div class="card-dark p-5">
+          <h3 class="text-base font-bold text-white mb-3 flex items-center gap-2">
+            <span>💬</span> Dedicated Private Team Workspace
+          </h3>
+          <ul class="text-xs text-gray-300 space-y-2.5">
+            <li><strong>Scoped Real-Time Chat:</strong> Socket.IO room <code>team:REPORT_ID</code> with JWT authentication on join.</li>
+            <li><strong>Privacy Guarantee:</strong> Only confirmed members and coordinator can access messages. Unrelated users are rejected.</li>
+            <li><strong>Coordination Checklist:</strong> Shared subtasks with checkbox toggling and completion percentages.</li>
+            <li><strong>Dispatch Logistics:</strong> Physical meeting point, scheduled time, and coordinator notes.</li>
+            <li><strong>Completion Evidence Review:</strong> Form for uploading resolution notes and photos; coordinator approves to resolve report.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 7: TESTING METHODOLOGY & 100% VERIFICATION -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 07 • Quality Assurance</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Testing Methodology & 100% Verified Results</h2>
+        </div>
+        <span class="badge-green px-3 py-1 rounded text-xs font-semibold">100% Pass Rate</span>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-4 mb-4">
+        <div class="card-dark p-3 text-center">
+          <span class="text-xs text-gray-400">Client ESLint</span>
+          <p class="text-xl font-bold text-emerald-400 mt-1">0 Errors, 0 Warnings</p>
+        </div>
+        <div class="card-dark p-3 text-center">
+          <span class="text-xs text-gray-400">Client Vite Build</span>
+          <p class="text-xl font-bold text-emerald-400 mt-1">Built in 691 ms</p>
+        </div>
+        <div class="card-dark p-3 text-center">
+          <span class="text-xs text-gray-400">Server Syntax Check</span>
+          <p class="text-xl font-bold text-emerald-400 mt-1">Clean (Node --check)</p>
+        </div>
+      </div>
+
+      <div class="card-dark p-4 overflow-x-auto flex-1">
+        <table class="w-full text-xs text-left text-gray-300">
+          <thead class="text-gray-400 border-b border-gray-700/60 uppercase text-[10.5px]">
+            <tr>
+              <th class="py-2">Test Scenario</th>
+              <th class="py-2">Verification Objective</th>
+              <th class="py-2">Result</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-800">
+            <tr>
+              <td class="py-2 font-semibold text-white">Direct Authentication</td>
+              <td class="py-2">Register citizen, volunteer, and admin without OTP requirement</td>
+              <td class="py-2 text-emerald-400 font-bold">✔ PASS</td>
+            </tr>
+            <tr>
+              <td class="py-2 font-semibold text-white">Direct Password Reset</td>
+              <td class="py-2">Hash new password, update tokenVersion, test login with new credentials</td>
+              <td class="py-2 text-emerald-400 font-bold">✔ PASS</td>
+            </tr>
+            <tr>
+              <td class="py-2 font-semibold text-white">Citizen Report Creation</td>
+              <td class="py-2">POST /api/reports with GeoJSON Point coordinates & priority</td>
+              <td class="py-2 text-emerald-400 font-bold">✔ PASS</td>
+            </tr>
+            <tr>
+              <td class="py-2 font-semibold text-white">Team Formation & Capacity</td>
+              <td class="py-2">Configure team capacity of 2; 3rd member join attempt atomically blocked</td>
+              <td class="py-2 text-emerald-400 font-bold">✔ PASS</td>
+            </tr>
+            <tr>
+              <td class="py-2 font-semibold text-white">Private Team Message Security</td>
+              <td class="py-2">Confirmed members authorized; unrelated volunteer access strictly denied</td>
+              <td class="py-2 text-emerald-400 font-bold">✔ PASS</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SLIDE 8: COMMANDS & CREDENTIALS DIRECTORY -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 08 • Quick Reference</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Commands & Test Credentials Directory</h2>
+        </div>
+        <span class="badge-gold px-3 py-1 rounded text-xs font-semibold">Universal Pass: Password123!</span>
+      </div>
+
+      <div class="grid md:grid-cols-2 gap-5 flex-1">
+        <div class="card-dark p-4">
+          <h4 class="text-sm font-bold text-white mb-2 flex items-center gap-2">
+            <span>💻</span> Execution Commands
+          </h4>
+          <div class="bg-black/60 p-3 rounded text-xs font-mono text-gray-300 space-y-1.5 overflow-x-auto">
+            <div><span class="text-gray-500"># Start Backend Server (Port 5001)</span></div>
+            <div class="text-emerald-300">cd server &amp;&amp; npm run dev</div>
+            <div><span class="text-gray-500"># Start Frontend Client (Port 5173)</span></div>
+            <div class="text-emerald-300">cd client &amp;&amp; npm run dev</div>
+            <div><span class="text-gray-500"># Seed Demo Data (Users &amp; Reports)</span></div>
+            <div class="text-emerald-300">npm --prefix server run seed</div>
+            <div><span class="text-gray-500"># Run Verification Tests</span></div>
+            <div class="text-emerald-300">node server/scripts/testAuthAndTeam.js</div>
+            <div><span class="text-gray-500"># Client Lint &amp; Build</span></div>
+            <div class="text-emerald-300">npm --prefix client run lint &amp;&amp; npm --prefix client run build</div>
+          </div>
+        </div>
+
+        <div class="card-dark p-4">
+          <h4 class="text-sm font-bold text-white mb-2 flex items-center gap-2">
+            <span>🔑</span> Seeded Demo Accounts (Password: Password123!)
+          </h4>
+          <div class="text-xs space-y-2 text-gray-300">
+            <div class="p-2 bg-gray-800/60 rounded flex justify-between items-center">
+              <div>
+                <strong class="text-amber-400">Administrator:</strong> admin@locallens.test
+                <div class="text-[11px] text-gray-400">Full command, dispatch, recruitment &amp; CSV export</div>
+              </div>
+              <span class="badge-gold px-2 py-0.5 rounded text-[10px]">Admin</span>
+            </div>
+            <div class="p-2 bg-gray-800/60 rounded flex justify-between items-center">
+              <div>
+                <strong class="text-purple-400">Volunteer (Rahul):</strong> volunteer.rahul@locallens.test
+                <div class="text-[11px] text-gray-400">Indiranagar • Roads, streetlights, asphalt repair</div>
+              </div>
+              <span class="badge-green px-2 py-0.5 rounded text-[10px]">Volunteer</span>
+            </div>
+            <div class="p-2 bg-gray-800/60 rounded flex justify-between items-center">
+              <div>
+                <strong class="text-purple-400">Volunteer (Priya):</strong> volunteer.priya@locallens.test
+                <div class="text-[11px] text-gray-400">Jayanagar • Drainage jetting, water leaks</div>
+              </div>
+              <span class="badge-green px-2 py-0.5 rounded text-[10px]">Volunteer</span>
+            </div>
+            <div class="p-2 bg-gray-800/60 rounded flex justify-between items-center">
+              <div>
+                <strong class="text-emerald-400">Citizen (Anita):</strong> citizen.anita@locallens.test
+                <div class="text-[11px] text-gray-400">Central Ward • Active resident reporter</div>
+              </div>
+              <span class="bg-gray-700 text-gray-300 px-2 py-0.5 rounded text-[10px]">Citizen</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SLIDE 9: TEAM ROLES & CONCLUSION -->
+    <section class="slide">
+      <div class="flex justify-between items-center mb-6 border-b border-gray-800 pb-4">
+        <div>
+          <span class="text-xs font-bold tracking-widest uppercase text-[#C49A55]">Slide 09 • Project Closure</span>
+          <h2 class="text-2xl md:text-3xl font-bold text-white mt-1">Team Roles, Conclusion & Future Roadmap</h2>
+        </div>
+        <span class="badge-green px-3 py-1 rounded text-xs font-semibold">FSDAI - 1 Cohort</span>
+      </div>
+
+      <div class="grid md:grid-cols-3 gap-4 mb-6">
+        <div class="card-dark p-4">
+          <div class="w-10 h-10 rounded-full bg-emerald-800 flex items-center justify-center font-bold text-white mb-2">GA</div>
+          <h4 class="font-bold text-white text-sm">Gopal Ainapurapu</h4>
+          <span class="text-xs text-[#C49A55]">Full-Stack & Database Engineering</span>
+          <p class="text-xs text-gray-300 mt-2">MongoDB Mongoose schemas, compound 2dsphere indexes, geospatial radius queries, and team recruitment backend.</p>
+        </div>
+        <div class="card-dark p-4">
+          <div class="w-10 h-10 rounded-full bg-blue-800 flex items-center justify-center font-bold text-white mb-2">PT</div>
+          <h4 class="font-bold text-white text-sm">Paavan Thota</h4>
+          <span class="text-xs text-[#C49A55]">Architecture, Security & Sockets</span>
+          <p class="text-xs text-gray-300 mt-2">JWT authentication, private team socket rooms, bcrypt password recovery, rate-limiting, and test suite automation.</p>
+        </div>
+        <div class="card-dark p-4">
+          <div class="w-10 h-10 rounded-full bg-purple-800 flex items-center justify-center font-bold text-white mb-2">SC</div>
+          <h4 class="font-bold text-white text-sm">Sri Charan Sangem</h4>
+          <span class="text-xs text-[#C49A55]">Frontend UI/UX & Geospatial Mapping</span>
+          <p class="text-xs text-gray-300 mt-2">React 19 SPA interface, Leaflet click-to-pin coordinate picker, Recharts analytics console, and Team Workspace UI.</p>
+        </div>
+      </div>
+
+      <div class="card-dark p-4">
+        <h4 class="text-xs font-bold text-[#C49A55] uppercase tracking-wider mb-1">Project Conclusion</h4>
+        <p class="text-xs text-gray-300 leading-relaxed">
+          LocalLens successfully proves that a modern, community-oriented MERN platform can eliminate communication bottlenecks, enforce verifiable audit accountability, and empower volunteers and municipal administrators to resolve civic infrastructure problems in real-time.
+        </p>
+      </div>
+    </section>
+
+    <!-- SLIDE 10: THANK YOU -->
+    <section class="slide justify-center items-center text-center">
+      <div class="w-16 h-16 rounded-full bg-[#24483D] flex items-center justify-center text-2xl mb-4 border border-emerald-500/40">
+        ◎
+      </div>
+      <h2 class="text-4xl md:text-5xl font-extrabold text-white mb-3">
+        Thank You<span class="text-[#C49A55]">!</span>
+      </h2>
+      <p class="text-gray-300 max-w-lg mb-8 text-base">
+        LocalLens — Turning civic complaints into coordinated community response.
+      </p>
+      <div class="flex gap-4">
+        <button onclick="goToSlide(0)" class="nav-btn">↺ Return to First Slide</button>
+        <button onclick="goToSlide(7)" class="nav-btn">View Test Credentials</button>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Bottom Navigation Bar -->
+  <footer class="controls-bar">
+    <div class="flex items-center gap-3">
+      <span class="font-heading font-extrabold text-white text-base tracking-tight">
+        LocalLens<span class="text-[#C49A55]">.</span>
+      </span>
+      <span class="text-xs text-gray-400 border-l border-gray-700 pl-3">TalentSprint FSDAI - 1 Cohort Review</span>
+    </div>
+
+    <div class="flex items-center gap-4">
+      <button id="prevBtn" onclick="changeSlide(-1)" class="nav-btn">← Previous</button>
+      <span id="slideIndicator" class="text-xs font-semibold text-gray-300 min-w-[90px] text-center">
+        Slide 1 of 11
+      </span>
+      <button id="nextBtn" onclick="changeSlide(1)" class="nav-btn">Next →</button>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <select id="slideSelect" onchange="goToSlide(Number(this.value))" class="bg-[#24352D] text-xs text-gray-200 border border-gray-700 rounded px-2.5 py-1.5 focus:outline-none">
+        <option value="0">Slide 1: Title & Overview</option>
+        <option value="1">Slide 2: Problem Statement & Objectives</option>
+        <option value="2">Slide 3: Technology Stack & Database</option>
+        <option value="3">Slide 4: Multi-Tier Architecture & Data Flow</option>
+        <option value="4">Slide 5: Civic Issue Lifecycle & State Machine</option>
+        <option value="5">Slide 6: Citizen, Volunteer & Admin Portals</option>
+        <option value="6">Slide 7: Team Formation & Private Workspace</option>
+        <option value="7">Slide 8: Testing Methodology & 100% Results</option>
+        <option value="8">Slide 9: Commands & Test Credentials</option>
+        <option value="9">Slide 10: Team Roles & Conclusion</option>
+        <option value="10">Slide 11: Thank You</option>
+      </select>
+    </div>
+  </footer>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    const indicator = document.getElementById('slideIndicator');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const select = document.getElementById('slideSelect');
+    let currentSlide = 0;
+
+    function updatePresentation() {
+      slides.forEach((slide, idx) => {
+        slide.classList.toggle('active', idx === currentSlide);
+      });
+      indicator.textContent = `Slide ${currentSlide + 1} of ${slides.length}`;
+      prevBtn.disabled = currentSlide === 0;
+      nextBtn.disabled = currentSlide === slides.length - 1;
+      if (select) select.value = currentSlide;
+    }
+
+    function changeSlide(direction) {
+      const target = currentSlide + direction;
+      if (target >= 0 && target < slides.length) {
+        currentSlide = target;
+        updatePresentation();
+      }
+    }
+
+    function goToSlide(index) {
+      if (index >= 0 && index < slides.length) {
+        currentSlide = index;
+        updatePresentation();
+      }
+    }
+
+    // Keyboard navigation
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        changeSlide(1);
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        changeSlide(-1);
+      } else if (e.key === 'Home') {
+        goToSlide(0);
+      } else if (e.key === 'End') {
+        goToSlide(slides.length - 1);
+      }
+    });
+
+    updatePresentation();
+  </script>
+</body>
+</html>

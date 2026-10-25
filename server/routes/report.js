@@ -75,10 +75,17 @@ function uploadImageToCloudinary(file) {
   });
 }
 
-// Create a notification without breaking a successful report operation.
-async function createUserNotification(notificationData) {
+// Create a notification without breaking a successful report operation, and push via socket.io if available.
+async function createUserNotification(notificationData, io = null) {
   try {
-    await Notification.create(notificationData);
+    const notification = await Notification.create(notificationData);
+    if (io && notificationData.recipient) {
+      io.to(`user:${notificationData.recipient.toString()}`).emit(
+        'notification',
+        notification
+      );
+    }
+    return notification;
   } catch (error) {
     console.error('Create notification error:', error.message);
   }
@@ -240,13 +247,24 @@ router.post(
         ],
       });
 
+      const io = req.app.get('io');
+
       await createUserNotification({
         recipient: req.user._id,
         type: 'report-submitted',
         title: 'Report submitted',
         message: `Your report "${report.title}" has been submitted.`,
         report: report._id,
-      });
+      }, io);
+
+      if (io) {
+        io.emit('report:created', {
+          reportId: report._id,
+          title: report.title,
+          category: report.category,
+          priority: report.priority,
+        });
+      }
 
       return res.status(201).json({
         success: true,
@@ -293,7 +311,7 @@ router.get(
       ]),
 
     query('page').optional().isInt({ min: 1 }),
-    query('limit').optional().isInt({ min: 1, max: 50 }),
+    query('limit').optional().isInt({ min: 1, max: 100 }),
   ],
   validateRequest,
   async (req, res) => {
@@ -673,13 +691,15 @@ router.patch(
 
       await report.save();
 
+      const io = req.app.get('io');
+
       await createUserNotification({
         recipient: volunteer._id,
         report: report._id,
         type: 'report-assigned',
         title: 'New report assigned',
         message: `You have been assigned the report "${report.title}".`,
-      });
+      }, io);
 
       await createUserNotification({
         recipient: report.reporter,
@@ -687,7 +707,15 @@ router.patch(
         type: 'report-assigned',
         title: 'Volunteer assigned',
         message: `A volunteer has been assigned to your report "${report.title}".`,
-      });
+      }, io);
+
+      if (io) {
+        io.emit('report:updated', {
+          reportId: report._id,
+          status: report.status,
+          assignedVolunteer: volunteer._id,
+        });
+      }
 
       return res.json({
         success: true,
@@ -807,6 +835,7 @@ router.patch(
 
       await report.save();
 
+      const io = req.app.get('io');
       const notification = getStatusNotification(
         status,
         report.title
@@ -817,6 +846,14 @@ router.patch(
           recipient: report.reporter,
           report: report._id,
           ...notification,
+        }, io);
+      }
+
+      if (io) {
+        io.emit('report:updated', {
+          reportId: report._id,
+          status: report.status,
+          resolutionNote: report.resolutionNote,
         });
       }
 

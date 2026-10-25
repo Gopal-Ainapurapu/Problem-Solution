@@ -119,6 +119,104 @@ const reportSchema = new Schema(
       default: null
     },
 
+    assignmentType: {
+      type: String,
+      enum: ['single', 'team'],
+      default: 'single'
+    },
+
+    requiredTeamSize: {
+      type: Number,
+      min: 1,
+      max: 50,
+      default: 1
+    },
+
+    teamCoordinator: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    },
+
+    teamMembers: {
+      type: [
+        {
+          user: {
+            type: Schema.Types.ObjectId,
+            ref: 'User',
+            required: true
+          },
+          role: {
+            type: String,
+            enum: ['lead', 'member'],
+            default: 'member'
+          },
+          joinedAt: {
+            type: Date,
+            default: Date.now
+          }
+        }
+      ],
+      default: []
+    },
+
+    recruitmentStatus: {
+      type: String,
+      enum: ['none', 'open', 'full', 'closed', 'cancelled'],
+      default: 'none'
+    },
+
+    recruitmentRadiusKm: {
+      type: Number,
+      min: 1,
+      max: 100,
+      default: 10
+    },
+
+    recruitmentDeadline: {
+      type: Date,
+      default: null
+    },
+
+    requiredSkills: {
+      type: [{ type: String, trim: true, lowercase: true }],
+      default: []
+    },
+
+    meetingDetails: {
+      location: { type: String, trim: true, maxlength: 200, default: '' },
+      scheduledDate: { type: Date, default: null },
+      instructions: { type: String, trim: true, maxlength: 1000, default: '' }
+    },
+
+    teamTasks: {
+      type: [
+        {
+          title: { type: String, trim: true, required: true, maxlength: 200 },
+          completed: { type: Boolean, default: false },
+          assignedTo: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+          completedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+          completedAt: { type: Date, default: null }
+        }
+      ],
+      default: []
+    },
+
+    completionReport: {
+      submittedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+      submittedAt: { type: Date, default: null },
+      notes: { type: String, trim: true, maxlength: 2000, default: '' },
+      images: { type: [{ type: String, trim: true }], default: [] },
+      reviewedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+      reviewedAt: { type: Date, default: null },
+      reviewStatus: {
+        type: String,
+        enum: ['none', 'pending', 'approved', 'rejected'],
+        default: 'none'
+      },
+      reviewNotes: { type: String, trim: true, maxlength: 1000, default: '' }
+    },
+
     resolutionNote: {
       type: String,
       trim: true,
@@ -173,6 +271,9 @@ const reportSchema = new Schema(
 reportSchema.index({ location: '2dsphere' });
 reportSchema.index({ status: 1, category: 1, createdAt: -1 });
 reportSchema.index({ reporter: 1, createdAt: -1 });
+reportSchema.index({ 'teamMembers.user': 1 });
+reportSchema.index({ teamCoordinator: 1 });
+reportSchema.index({ recruitmentStatus: 1 });
 
 const Report = model('Report', reportSchema);
 

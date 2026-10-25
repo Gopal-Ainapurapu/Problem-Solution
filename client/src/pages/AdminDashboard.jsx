@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -17,7 +16,6 @@ const STATUSES = [
 
 const formatStatus = (status) => {
   if (!status) return 'Unknown';
-
   return status
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -26,22 +24,11 @@ const formatStatus = (status) => {
 
 const formatCategory = (category) => {
   if (!category) return 'Other';
-
   return category
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 };
-
-function StatusBadge({ status }) {
-  const safeStatus = status || 'unknown';
-
-  return (
-    <span className={`admin-badge admin-badge-${safeStatus}`}>
-      {formatStatus(safeStatus)}
-    </span>
-  );
-}
 
 export default function AdminDashboard() {
   const [reports, setReports] = useState([]);
@@ -50,79 +37,145 @@ export default function AdminDashboard() {
   const [search, setSearch] = useState('');
   const [selectedVolunteers, setSelectedVolunteers] = useState({});
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [volunteersError, setVolunteersError] = useState('');
   const [busyId, setBusyId] = useState('');
 
-  // Fetch reports and volunteers through one shared function.
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
+  const loadData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    }
 
     try {
-      const [reportsResponse, volunteersResponse] = await Promise.all([
+      const [reportsResult, volunteersResult] = await Promise.allSettled([
         api.get('/reports', { params: { limit: 50 } }),
         api.get('/users/volunteers'),
       ]);
 
-      const reportsData = reportsResponse.data;
-      const volunteersData = volunteersResponse.data;
+      if (reportsResult.status === 'fulfilled') {
+        const reportsData = reportsResult.value.data;
+        const reportList = Array.isArray(reportsData)
+          ? reportsData
+          : Array.isArray(reportsData?.reports)
+            ? reportsData.reports
+            : [];
+        setReports(reportList);
+        setLoadError(false);
+      } else {
+        setLoadError(true);
+        toast.error(
+          reportsResult.reason?.response?.data?.message || 'Unable to load reports'
+        );
+      }
 
-      const reportList = Array.isArray(reportsData)
-        ? reportsData
-        : Array.isArray(reportsData?.reports)
-          ? reportsData.reports
-          : [];
-
-      const volunteerList = Array.isArray(volunteersData?.volunteers)
-        ? volunteersData.volunteers
-        : Array.isArray(volunteersData)
-          ? volunteersData
-          : [];
-
-      setReports(reportList);
-      setVolunteers(volunteerList);
-      setLoadError(false);
+      if (volunteersResult.status === 'fulfilled') {
+        const volunteersData = volunteersResult.value.data;
+        const volunteerList = Array.isArray(volunteersData?.volunteers)
+          ? volunteersData.volunteers
+          : Array.isArray(volunteersData)
+            ? volunteersData
+            : [];
+        setVolunteers(volunteerList);
+        setVolunteersError('');
+      } else {
+        const status = volunteersResult.reason?.response?.status;
+        if (status === 401 || status === 403) {
+          setVolunteersError('Administrator session required to list or assign volunteers.');
+        } else {
+          setVolunteersError('Unable to load volunteer roster.');
+        }
+      }
     } catch (error) {
       setLoadError(true);
-
       toast.error(
-        error.response?.data?.message ||
-          'Unable to load admin dashboard'
+        error.response?.data?.message || 'Unable to load admin dashboard'
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let ignore = false;
 
-  const handleRefresh = () => {
-    loadData();
-  };
+    async function init() {
+      try {
+        const [reportsResult, volunteersResult] = await Promise.allSettled([
+          api.get('/reports', { params: { limit: 50 } }),
+          api.get('/users/volunteers'),
+        ]);
 
-  // Dashboard counts reflect the reports currently returned by the API.
-  const counts = useMemo(() => {
-    const result = { total: reports.length };
+        if (ignore) return;
 
-    for (const status of STATUSES.slice(1)) {
-      result[status] = reports.filter(
-        (report) => report.status === status
-      ).length;
+        if (reportsResult.status === 'fulfilled') {
+          const reportsData = reportsResult.value.data;
+          const reportList = Array.isArray(reportsData)
+            ? reportsData
+            : Array.isArray(reportsData?.reports)
+              ? reportsData.reports
+              : [];
+          setReports(reportList);
+          setLoadError(false);
+        } else {
+          setLoadError(true);
+          toast.error(
+            reportsResult.reason?.response?.data?.message || 'Unable to load reports'
+          );
+        }
+
+        if (volunteersResult.status === 'fulfilled') {
+          const volunteersData = volunteersResult.value.data;
+          const volunteerList = Array.isArray(volunteersData?.volunteers)
+            ? volunteersData.volunteers
+            : Array.isArray(volunteersData)
+              ? volunteersData
+              : [];
+          setVolunteers(volunteerList);
+          setVolunteersError('');
+        } else {
+          const status = volunteersResult.reason?.response?.status;
+          if (status === 401 || status === 403) {
+            setVolunteersError('Administrator session required to list or assign volunteers.');
+          } else {
+            setVolunteersError('Unable to load volunteer roster.');
+          }
+        }
+      } catch (error) {
+        if (!ignore) {
+          setLoadError(true);
+          toast.error(
+            error.response?.data?.message || 'Unable to load admin dashboard'
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
     }
 
+    init();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const counts = useMemo(() => {
+    const result = { total: reports.length };
+    for (const status of STATUSES.slice(1)) {
+      result[status] = reports.filter((r) => r.status === status).length;
+    }
     return result;
   }, [reports]);
 
-  // Search by report details, category, address, or reporter name.
   const visibleReports = useMemo(() => {
     const term = search.trim().toLowerCase();
 
     return reports.filter((report) => {
-      const matchesStatus =
-        filter === 'all' || report.status === filter;
-
+      const matchesStatus = filter === 'all' || report.status === filter;
       const searchableValues = [
         report.title,
         report.description,
@@ -142,10 +195,8 @@ export default function AdminDashboard() {
     });
   }, [reports, filter, search]);
 
-  // Verify or reject a pending report.
   const updateStatus = async (report, status) => {
     if (busyId) return;
-
     setBusyId(report._id);
 
     try {
@@ -156,36 +207,27 @@ export default function AdminDashboard() {
 
       const updatedReport = response.data?.report;
 
-      setReports((previous) =>
-        previous.map((item) => {
+      setReports((prev) =>
+        prev.map((item) => {
           if (item._id !== report._id) return item;
-
-          // Support either a full report response or a status-only response.
-          return updatedReport
-            ? { ...item, ...updatedReport }
-            : { ...item, status };
+          return updatedReport ? { ...item, ...updatedReport } : { ...item, status };
         })
       );
 
-      toast.success(
-        `Report ${formatStatus(status).toLowerCase()} successfully`
-      );
+      toast.success(`Report marked ${formatStatus(status).toLowerCase()}`);
     } catch (error) {
       toast.error(
-        error.response?.data?.message ||
-          'Unable to update report status'
+        error.response?.data?.message || 'Unable to update report status'
       );
     } finally {
       setBusyId('');
     }
   };
 
-  // Assign a verified report to a selected volunteer.
   const assignVolunteer = async (report) => {
     if (busyId) return;
 
     const volunteerId = selectedVolunteers[report._id];
-
     if (!volunteerId) {
       toast.error('Select a volunteer first');
       return;
@@ -201,10 +243,9 @@ export default function AdminDashboard() {
 
       const updatedReport = response.data?.report;
 
-      setReports((previous) =>
-        previous.map((item) => {
+      setReports((prev) =>
+        prev.map((item) => {
           if (item._id !== report._id) return item;
-
           return updatedReport
             ? { ...item, ...updatedReport }
             : {
@@ -215,16 +256,11 @@ export default function AdminDashboard() {
         })
       );
 
-      setSelectedVolunteers((previous) => ({
-        ...previous,
-        [report._id]: '',
-      }));
-
+      setSelectedVolunteers((prev) => ({ ...prev, [report._id]: '' }));
       toast.success('Volunteer assigned successfully');
     } catch (error) {
       toast.error(
-        error.response?.data?.message ||
-          'Unable to assign volunteer'
+        error.response?.data?.message || 'Unable to assign volunteer'
       );
     } finally {
       setBusyId('');
@@ -233,322 +269,350 @@ export default function AdminDashboard() {
 
   return (
     <div className="admin-layout">
+      {/* Sidebar */}
       <aside className="admin-sidebar">
-        <h2 className="admin-brand">
-          Local<span>Lens</span>
-        </h2>
-
-        <p className="admin-sidebar-subtitle">
-          Community Management
-        </p>
-
-        <p className="admin-nav-label">Workspace</p>
-
-        <nav className="admin-nav">
-          <Link className="admin-nav-link active" to="/admin">
-            ▦ &nbsp; Dashboard
+        <div>
+          <Link to="/" className="admin-brand">
+            <span
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '8px',
+                background: 'var(--color-primary)',
+                color: 'white',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '15px',
+                fontWeight: 800,
+              }}
+            >
+              ◎
+            </span>
+            <span>
+              Local<span>Lens</span>
+            </span>
           </Link>
+          <p className="admin-sidebar-subtitle">Administration Workspace</p>
 
-          <Link className="admin-nav-link" to="/reports">
-            ◫ &nbsp; All Reports
+          <p className="admin-nav-label">Management</p>
+          <nav className="admin-nav">
+            <Link className="admin-nav-link active" to="/admin">
+              <span>▦</span> Reports Console
+            </Link>
+            <Link className="admin-nav-link" to="/admin/analytics">
+              <span>📊</span> Analytics & Trends
+            </Link>
+            <Link className="admin-nav-link" to="/reports-map">
+              <span>🗺️</span> Issue Heatmap
+            </Link>
+            <Link className="admin-nav-link" to="/reports">
+              <span>📋</span> Public Directory
+            </Link>
+          </nav>
+        </div>
+
+        <div className="admin-sidebar-footer">
+          <Link className="admin-nav-link" to="/profile">
+            <span>👤</span> Admin Profile
           </Link>
-
           <Link className="admin-nav-link" to="/">
-            ⌂ &nbsp; Home
+            <span>←</span> Back to Public Site
           </Link>
-          <Link className="admin-nav-link" to="/admin/analytics">
-  ▥ &nbsp; Analytics
-</Link>
-        </nav>
-
-        <div className="admin-sidebar-note">
-          <strong>Community first</strong>
-          <br />
-          Review local issues and coordinate volunteers to improve your
-          community.
         </div>
       </aside>
 
+      {/* Main Workspace */}
       <main className="admin-main">
-        <header className="admin-topbar">
-          <div>
-            <p className="admin-eyebrow">
-              Administration / Overview
-            </p>
-
-            <h1 className="admin-title">
-              Dashboard Overview
-            </h1>
-
-            <p className="admin-subtitle">
-              Monitor community issues and manage report resolution.
+        <header className="admin-header">
+          <div className="admin-header-copy">
+            <span className="admin-eyebrow">
+              <span aria-hidden="true">🔒</span> Municipal Operations
+            </span>
+            <h1>Reports Console</h1>
+            <p className="admin-header-subtitle">
+              Verify submitted issues, assign verified tasks to available volunteers, and oversee city resolutions.
             </p>
           </div>
 
-          <div className="admin-user-chip">
-            🛡️ Admin Workspace
+          <div className="admin-header-actions">
+            <button
+              type="button"
+              onClick={() => loadData(true)}
+              disabled={refreshing || loading}
+              className="btn btn-outline"
+            >
+              {refreshing ? 'Refreshing...' : '↻ Refresh Data'}
+            </button>
+
+            <Link to="/admin/analytics" className="btn btn-primary">
+              View Analytics Charts →
+            </Link>
           </div>
         </header>
 
-        <section className="admin-stats">
-          {[
-            ['Total Reports', counts.total, 'Reports loaded'],
-            ['Pending Review', counts.pending, 'Awaiting verification'],
-            [
-              'In Progress',
-              counts['in-progress'],
-              'Work underway',
-            ],
-            ['Resolved', counts.resolved, 'Issues completed'],
-          ].map(([title, count, caption]) => (
-            <article className="admin-stat-card" key={title}>
-              <p className="admin-stat-label">{title}</p>
-              <h2 className="admin-stat-value">{count}</h2>
-              <p className="admin-stat-caption">{caption}</p>
-            </article>
-          ))}
+        {/* 7 Status Summary Cards */}
+        <section className="admin-stats-grid" aria-label="Status counts">
+          <article className="admin-stat-card">
+            <p className="admin-stat-title">Total Reports</p>
+            <p className="admin-stat-number">{counts.total}</p>
+          </article>
+          <article className="admin-stat-card">
+            <p className="admin-stat-title" style={{ color: '#89500b' }}>Pending Review</p>
+            <p className="admin-stat-number" style={{ color: '#89500b' }}>{counts.pending || 0}</p>
+          </article>
+          <article className="admin-stat-card">
+            <p className="admin-stat-title" style={{ color: '#2457a7' }}>Verified</p>
+            <p className="admin-stat-number" style={{ color: '#2457a7' }}>{counts.verified || 0}</p>
+          </article>
+          <article className="admin-stat-card">
+            <p className="admin-stat-title" style={{ color: '#6840a4' }}>Assigned</p>
+            <p className="admin-stat-number" style={{ color: '#6840a4' }}>{counts.assigned || 0}</p>
+          </article>
+          <article className="admin-stat-card">
+            <p className="admin-stat-title" style={{ color: '#a4471a' }}>In Progress</p>
+            <p className="admin-stat-number" style={{ color: '#a4471a' }}>{counts['in-progress'] || 0}</p>
+          </article>
+          <article className="admin-stat-card">
+            <p className="admin-stat-title" style={{ color: '#216b43' }}>Resolved</p>
+            <p className="admin-stat-number" style={{ color: '#216b43' }}>{counts.resolved || 0}</p>
+          </article>
+          <article className="admin-stat-card">
+            <p className="admin-stat-title" style={{ color: '#a12f2b' }}>Rejected</p>
+            <p className="admin-stat-number" style={{ color: '#a12f2b' }}>{counts.rejected || 0}</p>
+          </article>
         </section>
 
-        <section className="admin-panel">
-          <header className="admin-panel-header">
-            <div>
-              <h2 className="admin-panel-title">
-                Community Reports
-              </h2>
-
-              <p className="admin-panel-description">
-                Verify reports, assign volunteers, and track progress.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              className="admin-button admin-button-secondary"
-              onClick={handleRefresh}
-              disabled={loading || Boolean(busyId)}
-            >
-              {loading ? 'Loading...' : '↻ Refresh'}
-            </button>
-          </header>
-
-          <div className="admin-controls">
+        {/* Filter & Search Bar */}
+        <div className="admin-filter-bar">
+          <div className="admin-search-box">
             <input
-              className="admin-input admin-search"
-              type="search"
-              placeholder="Search title, category, reporter..."
+              type="text"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              aria-label="Search reports"
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search reports by title, category, address or citizen..."
+              className="search-input"
             />
-
-            <select
-              className="admin-select"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              aria-label="Filter reports by status"
-            >
-              {STATUSES.map((status) => (
-                <option key={status} value={status}>
-                  {status === 'all'
-                    ? 'All statuses'
-                    : formatStatus(status)}
-                </option>
-              ))}
-            </select>
           </div>
 
+          <div className="admin-status-pills">
+            {STATUSES.map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setFilter(status)}
+                className={`filter-pill ${filter === status ? 'active' : ''}`}
+              >
+                {status === 'all' ? 'All' : formatStatus(status)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {volunteersError && (
+          <div
+            style={{
+              backgroundColor: '#FEF3C7',
+              border: '1px solid #FCD34D',
+              borderRadius: '12px',
+              padding: '12px 18px',
+              marginBottom: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px',
+              color: '#92400E',
+              fontSize: '14px',
+            }}
+          >
+            <span style={{ fontSize: '18px' }} aria-hidden="true">⚠️</span>
+            <div>
+              <strong>Volunteer Access:</strong> {volunteersError} Ensure you are logged in with an administrator account (e.g. <code>admin@locallens.test</code>).
+            </div>
+          </div>
+        )}
+
+        {/* Reports Table Container */}
+        <section className="admin-table-container">
           {loading ? (
-            <div className="admin-loading">
-              Loading community reports...
+            <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+              <div className="loading-spinner" style={{ margin: '0 auto 16px' }} />
+              <p className="text-muted">Loading reports directory...</p>
             </div>
           ) : loadError ? (
-            <div className="admin-empty">
-              <h3>Unable to load dashboard data</h3>
-              <p>
-                Check your connection and make sure you are logged in
-                with an admin account.
-              </p>
-
+            <div className="empty-state">
+              <h3>Unable to load reports</h3>
+              <p>There was an error communicating with the API.</p>
               <button
                 type="button"
-                className="admin-button admin-button-secondary"
-                onClick={handleRefresh}
+                onClick={() => loadData(true)}
+                className="btn btn-primary"
+                style={{ marginTop: '16px' }}
               >
-                Try again
+                Try Again
               </button>
             </div>
           ) : visibleReports.length === 0 ? (
-            <div className="admin-empty">
+            <div className="empty-state">
               <h3>No reports found</h3>
-              <p>
-                {reports.length === 0
-                  ? 'There are no reports to display yet.'
-                  : 'Try a different search or status filter.'}
-              </p>
+              <p>No community issues match the selected filter criteria.</p>
             </div>
           ) : (
-            <div className="admin-table-wrap">
+            <div className="admin-table-responsive">
               <table className="admin-table">
                 <thead>
                   <tr>
-                    <th>Report</th>
+                    <th>Report Info</th>
                     <th>Category</th>
                     <th>Status</th>
-                    <th>Reported By</th>
-                    <th>Actions</th>
+                    <th>Location / Citizen</th>
+                    <th>Volunteer Assignment</th>
+                    <th>Admin Actions</th>
                   </tr>
                 </thead>
-
                 <tbody>
                   {visibleReports.map((report) => (
                     <tr key={report._id}>
-                      <td>
-                        <p className="admin-report-title">
-                          {report.title || 'Untitled report'}
-                        </p>
-
-                        <p className="admin-report-description">
-                          {report.description || 'No description provided.'}
-                        </p>
-
-                        {report.address && (
-                          <p className="admin-muted">
-                            📍 {report.address}
-                          </p>
-                        )}
-
-                        <Link to={`/reports/${report._id}`}>
-                          View details
+                      <td style={{ minWidth: '220px' }}>
+                        <Link
+                          to={`/reports/${report._id}`}
+                          className="admin-report-title"
+                        >
+                          {report.title}
                         </Link>
-                      </td>
-
-                      <td>{formatCategory(report.category)}</td>
-
-                      <td>
-                        <StatusBadge status={report.status} />
+                        <span className="admin-report-sub">
+                          Reported on {new Date(report.createdAt).toLocaleDateString()}
+                        </span>
                       </td>
 
                       <td>
-                        {report.reporter?.name || 'Unknown'}
+                        <span className="citizen-card-category">
+                          {formatCategory(report.category)}
+                        </span>
                       </td>
 
                       <td>
-                        <div className="admin-actions">
+                        <span className={`status-badge status-${report.status}`}>
+                          {formatStatus(report.status)}
+                        </span>
+                      </td>
+
+                      <td style={{ minWidth: '180px' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600 }}>
+                          📍 {report.address || 'Address on map'}
+                        </div>
+                        <div className="admin-report-sub">
+                          By: {report.reporter?.name || 'Citizen'}
+                        </div>
+                      </td>
+
+                      <td style={{ minWidth: '200px' }}>
+                        {report.status === 'verified' ? (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <select
+                              value={selectedVolunteers[report._id] || ''}
+                              onChange={(e) =>
+                                setSelectedVolunteers((prev) => ({
+                                  ...prev,
+                                  [report._id]: e.target.value,
+                                }))
+                              }
+                              className="admin-volunteer-select"
+                            >
+                              <option value="">Select volunteer...</option>
+                              {volunteers.map((v) => (
+                                <option key={v._id} value={v._id}>
+                                  {v.name} {v.isAvailable ? '(Available)' : '(Busy)'}
+                                </option>
+                              ))}
+                            </select>
+
+                            <button
+                              type="button"
+                              disabled={
+                                busyId === report._id ||
+                                !selectedVolunteers[report._id]
+                              }
+                              onClick={() => assignVolunteer(report)}
+                              className="btn btn-sm btn-primary"
+                            >
+                              Assign
+                            </button>
+                          </div>
+                        ) : report.assignedVolunteer ? (
+                          <span style={{ fontSize: '13px', color: '#6840a4', fontWeight: 600 }}>
+                            👤 Assigned to volunteer
+                          </span>
+                        ) : (
+                          <span className="text-muted" style={{ fontSize: '13px' }}>
+                            {report.status === 'pending'
+                              ? 'Verify first to assign'
+                              : 'No volunteer assigned'}
+                          </span>
+                        )}
+                      </td>
+
+                      <td style={{ minWidth: '180px' }}>
+                        <div className="admin-actions-cell">
                           {report.status === 'pending' && (
                             <>
                               <button
                                 type="button"
-                                className="admin-button admin-button-success"
-                                disabled={Boolean(busyId)}
-                                onClick={() =>
-                                  updateStatus(report, 'verified')
-                                }
+                                disabled={busyId === report._id}
+                                onClick={() => updateStatus(report, 'verified')}
+                                className="btn btn-sm btn-primary"
+                                style={{
+                                  backgroundColor: 'var(--color-success)',
+                                  borderColor: 'var(--color-success)',
+                                }}
                               >
-                                {busyId === report._id
-                                  ? 'Updating...'
-                                  : 'Verify'}
+                                ✓ Verify
                               </button>
-
                               <button
                                 type="button"
-                                className="admin-button admin-button-danger"
-                                disabled={Boolean(busyId)}
-                                onClick={() =>
-                                  updateStatus(report, 'rejected')
-                                }
+                                disabled={busyId === report._id}
+                                onClick={() => updateStatus(report, 'rejected')}
+                                className="btn btn-sm btn-danger"
                               >
-                                {busyId === report._id
-                                  ? 'Updating...'
-                                  : 'Reject'}
+                                ✕ Reject
                               </button>
                             </>
                           )}
 
                           {report.status === 'verified' && (
-                            <div className="admin-assignment">
-                              <select
-                                className="admin-select"
-                                aria-label={`Volunteer for ${
-                                  report.title || 'report'
-                                }`}
-                                value={
-                                  selectedVolunteers[report._id] || ''
-                                }
-                                disabled={Boolean(busyId)}
-                                onChange={(event) =>
-                                  setSelectedVolunteers((previous) => ({
-                                    ...previous,
-                                    [report._id]: event.target.value,
-                                  }))
-                                }
-                              >
-                                <option value="">
-                                  Select volunteer
-                                </option>
-
-                                {volunteers.map((volunteer) => (
-                                  <option
-                                    key={volunteer._id}
-                                    value={volunteer._id}
-                                  >
-                                    {volunteer.name || 'Unnamed volunteer'}
-                                    {volunteer.isAvailable
-                                      ? ' (Available)'
-                                      : ''}
-                                  </option>
-                                ))}
-                              </select>
-
-                              <button
-                                type="button"
-                                className="admin-button"
-                                disabled={
-                                  Boolean(busyId) ||
-                                  volunteers.length === 0
-                                }
-                                onClick={() => assignVolunteer(report)}
-                              >
-                                {busyId === report._id
-                                  ? 'Assigning...'
-                                  : 'Assign volunteer'}
-                              </button>
-
-                              {volunteers.length === 0 && (
-                                <small className="admin-muted">
-                                  No active volunteers found.
-                                </small>
-                              )}
-                            </div>
+                            <button
+                              type="button"
+                              disabled={busyId === report._id}
+                              onClick={() => updateStatus(report, 'rejected')}
+                              className="btn btn-sm btn-danger"
+                            >
+                              ✕ Reject
+                            </button>
                           )}
 
-                          {report.status === 'assigned' && (
-                            <span className="admin-muted">
-                              Volunteer assigned
+                          {['assigned', 'in-progress'].includes(report.status) && (
+                            <span style={{ fontSize: '12px', color: 'var(--color-muted)' }}>
+                              In Progress by Volunteer
                             </span>
                           )}
 
-                          {report.status === 'in-progress' && (
-                            <span className="admin-muted">
-                              Work underway
+                          {report.status === 'resolved' && (
+                            <span style={{ fontSize: '13px', color: 'var(--color-success)', fontWeight: 700 }}>
+                              ✓ Resolved
                             </span>
                           )}
 
-                          {['resolved', 'rejected'].includes(report.status) && (
-                            <span className="admin-muted">
-                              Closed
-                            </span>
-                          )}
+                          <Link
+                            to={`/reports/${report._id}/workspace`}
+                            className="btn btn-sm btn-outline"
+                            title="Manage Team & View Workspace"
+                            style={{ padding: '4px 8px', fontSize: '12px' }}
+                          >
+                            👥 Team Space
+                          </Link>
 
-                          {![
-                            'pending',
-                            'verified',
-                            'assigned',
-                            'in-progress',
-                            'resolved',
-                            'rejected',
-                          ].includes(report.status) && (
-                            <span className="admin-muted">
-                              No available actions
+                          {report.status === 'rejected' && (
+                            <span style={{ fontSize: '13px', color: 'var(--color-danger)', fontWeight: 700 }}>
+                              ✕ Rejected
                             </span>
                           )}
                         </div>
@@ -559,18 +623,7 @@ export default function AdminDashboard() {
               </table>
             </div>
           )}
-
-          {!loading && !loadError && reports.length > 0 && (
-            <p className="admin-muted">
-              Showing {visibleReports.length} of {reports.length} loaded
-              reports. The dashboard requests up to 50 reports.
-            </p>
-          )}
         </section>
-
-        <footer className="admin-footer">
-          LocalLens · Community issue management
-        </footer>
       </main>
     </div>
   );

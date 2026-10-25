@@ -1,0 +1,159 @@
+/* ==========================================================================
+   CreateReport.css — Modern Classic Issue Submission Form Styles
+   ========================================================================== */
+
+.create-report-page {
+  min-height: 100vh;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+.create-report-container {
+  width: min(800px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 36px 0 64px;
+}
+
+.create-report-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-bottom: 24px;
+  transition: color var(--transition);
+}
+
+.create-report-back:hover {
+  color: var(--color-primary);
+}
+
+.create-report-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 40px;
+  box-shadow: var(--shadow-sm);
+}
+
+.create-report-header {
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.create-report-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.create-report-header h1 {
+  margin: 0 0 8px;
+  font-family: var(--font-heading);
+  font-size: clamp(1.85rem, 3.2vw, 2.3rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+}
+
+.create-report-header p {
+  margin: 0;
+  color: var(--color-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+/* Upload dropzone */
+.create-dropzone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 32px 24px;
+  text-align: center;
+  background: var(--color-background);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.create-dropzone:hover {
+  border-color: var(--color-primary);
+  background: var(--color-soft-green);
+}
+
+.create-dropzone-icon {
+  font-size: 32px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.create-thumbs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.create-thumb-box {
+  position: relative;
+  height: 90px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.create-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.create-thumb-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(18, 24, 21, 0.75);
+  color: white;
+  border: 0;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.create-thumb-remove:hover {
+  background: var(--color-error);
+}
+
+/* Location group */
+.location-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.location-input-wrap {
+  flex: 1;
+}
+
+@media (max-width: 600px) {
+  .create-report-card {
+    padding: 24px 20px;
+  }
+  .location-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

@@ -1,17 +1,62 @@
-
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import toast from 'react-hot-toast';
 import api from '../api';
+import Navbar from '../components/Navbar';
+import './CreateReport.css';
 
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
-const ALLOWED_IMAGE_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-];
+const customPinIcon = L.divIcon({
+  className: 'custom-pin-icon',
+  html: '<div style="width:24px;height:24px;background:#24483D;border:3px solid #FFFFFF;border-radius:50%;box-shadow:0 3px 8px rgba(0,0,0,0.35);"></div>',
+  iconSize: [24, 24],
+  iconAnchor: [12, 12],
+});
+
+function MapLocationPicker({ latitude, longitude, onLocationSelect }) {
+  const defaultPos = [20.5937, 78.9629];
+  const hasCoords =
+    latitude &&
+    longitude &&
+    !Number.isNaN(parseFloat(latitude)) &&
+    !Number.isNaN(parseFloat(longitude));
+  const currentPos = hasCoords
+    ? [parseFloat(latitude), parseFloat(longitude)]
+    : defaultPos;
+
+  useMapEvents({
+    click(e) {
+      onLocationSelect(e.latlng.lat, e.latlng.lng);
+    },
+  });
+
+  return (
+    <>
+      <TileLayer
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      />
+      {hasCoords && <Marker position={currentPos} icon={customPinIcon} />}
+      <MapCenterController center={currentPos} hasCoords={Boolean(hasCoords)} />
+    </>
+  );
+}
+
+function MapCenterController({ center, hasCoords }) {
+  const map = useMap();
+  useEffect(() => {
+    if (center && center[0] && center[1] && hasCoords) {
+      map.setView(center, 15);
+    }
+  }, [center, hasCoords, map]);
+  return null;
+}
 
 export default function CreateReport() {
   const navigate = useNavigate();
@@ -21,6 +66,7 @@ export default function CreateReport() {
     title: '',
     description: '',
     category: 'garbage',
+    priority: 'medium',
     address: '',
     latitude: '',
     longitude: '',
@@ -29,46 +75,36 @@ export default function CreateReport() {
   const [selectedImages, setSelectedImages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [locationLoading, setLocationLoading] = useState(false);
-  const [addressLoading, setAddressLoading] = useState(false);
 
-  // Clean up preview URLs when the component is unmounted.
+  // Clean up preview URLs when component is unmounted.
   useEffect(() => {
+    const urls = previewUrls.current;
     return () => {
-      previewUrls.current.forEach((url) => {
+      urls.forEach((url) => {
         URL.revokeObjectURL(url);
       });
-
-      previewUrls.current.clear();
+      urls.clear();
     };
   }, []);
 
   const updateField = (e) => {
     const { name, value } = e.target;
-
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Select, validate, and preview report photos.
   const handleImageSelection = (e) => {
     const files = Array.from(e.target.files || []);
-
-    // Allow selecting the same file again later.
     e.target.value = '';
 
     if (files.length === 0) return;
 
     const remainingSlots = MAX_IMAGES - selectedImages.length;
-
     if (remainingSlots <= 0) {
       toast.error(`You can upload a maximum of ${MAX_IMAGES} photos.`);
       return;
     }
 
     const validFiles = [];
-
     for (const file of files) {
       if (validFiles.length >= remainingSlots) {
         toast.error(`You can upload a maximum of ${MAX_IMAGES} photos.`);
@@ -76,7 +112,7 @@ export default function CreateReport() {
       }
 
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        toast.error(`${file.name}: Use JPG, PNG, or WebP images.`);
+        toast.error(`${file.name}: Only JPG, PNG, and WebP images are allowed.`);
         continue;
       }
 
@@ -95,83 +131,53 @@ export default function CreateReport() {
       previewUrls.current.add(preview);
 
       return {
-        id: `${file.name}-${file.size}-${file.lastModified}-${preview}`,
+        id: `${file.name}-${file.size}-${Date.now()}-${Math.random()}`,
         file,
         preview,
       };
     });
 
-    setSelectedImages((prev) => [
-      ...prev,
-      ...newImages,
-    ]);
+    setSelectedImages((prev) => [...prev, ...newImages]);
   };
 
-  // Remove a selected photo and release its preview URL.
   const removeImage = (imageId) => {
     setSelectedImages((prev) => {
-      const imageToRemove = prev.find(
-        (image) => image.id === imageId
-      );
-
+      const imageToRemove = prev.find((image) => image.id === imageId);
       if (imageToRemove) {
         URL.revokeObjectURL(imageToRemove.preview);
         previewUrls.current.delete(imageToRemove.preview);
       }
-
       return prev.filter((image) => image.id !== imageId);
     });
   };
 
-  // Convert coordinates into a readable address.
-  const reverseGeocode = async (latitude, longitude) => {
-    setAddressLoading(true);
+  const handleMapLocationSelect = async (lat, lon) => {
+    setForm((prev) => ({
+      ...prev,
+      latitude: lat.toFixed(6),
+      longitude: lon.toFixed(6),
+    }));
 
     try {
-      const params = new URLSearchParams({
-        format: 'jsonv2',
-        lat: String(latitude),
-        lon: String(longitude),
-        zoom: '18',
-        addressdetails: '1',
-      });
-
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?${params.toString()}`
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
       );
-
-      if (!response.ok) {
-        throw new Error('Address lookup failed.');
+      const data = await res.json();
+      if (data?.display_name) {
+        setForm((prev) => ({
+          ...prev,
+          address: data.display_name,
+        }));
       }
-
-      const data = await response.json();
-
-      if (!data.display_name) {
-        toast.error('No address was found for these coordinates.');
-        return;
-      }
-
-      setForm((prev) => ({
-        ...prev,
-        address: data.display_name,
-      }));
-
-      toast.success('Address detected successfully!');
-    } catch (error) {
-      console.error('Reverse geocoding error:', error);
-
-      toast.error(
-        'Could not find the address. You can enter it manually.'
-      );
-    } finally {
-      setAddressLoading(false);
+    } catch {
+      // Coordinates set
     }
+    toast.success('Coordinates pinned on map.');
   };
 
-  // Detect the current device location.
-  const getCurrentLocation = () => {
+  const detectLocation = () => {
     if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported by this browser.');
+      toast.error('Geolocation is not supported by your browser.');
       return;
     }
 
@@ -179,112 +185,56 @@ export default function CreateReport() {
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
 
         setForm((prev) => ({
           ...prev,
-          latitude: String(latitude),
-          longitude: String(longitude),
+          latitude: lat.toFixed(6),
+          longitude: lon.toFixed(6),
         }));
 
-        setLocationLoading(false);
-
-        toast.success('Current coordinates detected.');
-
-        await reverseGeocode(latitude, longitude);
-      },
-      (error) => {
-        setLocationLoading(false);
-
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            toast.error(
-              'Location permission denied. Allow location access in your browser settings.'
-            );
-            break;
-
-          case error.POSITION_UNAVAILABLE:
-            toast.error('Your current location is unavailable.');
-            break;
-
-          case error.TIMEOUT:
-            toast.error('Location request timed out. Try again.');
-            break;
-
-          default:
-            toast.error('Unable to detect your location.');
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`
+          );
+          const data = await res.json();
+          if (data && data.display_name) {
+            setForm((prev) => ({
+              ...prev,
+              address: data.display_name,
+            }));
+          }
+        } catch {
+          // If reverse geocoding fails, coordinates are still set
+        } finally {
+          setLocationLoading(false);
+          toast.success('Location detected successfully.');
         }
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      }
+      () => {
+        setLocationLoading(false);
+        toast.error('Unable to retrieve your location. Check browser permissions.');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
     );
   };
 
-  // Look up an address for manually entered coordinates.
-  const findAddress = () => {
-    const latitude = Number(form.latitude);
-    const longitude = Number(form.longitude);
-
-    if (
-      form.latitude.trim() === '' ||
-      form.longitude.trim() === '' ||
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
-      toast.error('Enter valid latitude and longitude first.');
-      return;
-    }
-
-    reverseGeocode(latitude, longitude);
-  };
-
-  // Validate and submit the report and its selected images.
   const submit = async (e) => {
     e.preventDefault();
 
-    if (loading || locationLoading || addressLoading) return;
-
-    const title = form.title.trim();
-    const description = form.description.trim();
-    const address = form.address.trim();
-
-    if (title.length < 5 || title.length > 120) {
-      toast.error('Title must contain 5–120 characters.');
-      return;
-    }
-
-    if (description.length < 10 || description.length > 3000) {
-      toast.error('Description must contain 10–3000 characters.');
-      return;
-    }
-
-    if (address.length > 300) {
-      toast.error('Address cannot exceed 300 characters.');
-      return;
-    }
-
-    const latitude = Number(form.latitude);
-    const longitude = Number(form.longitude);
+    const lat = parseFloat(form.latitude);
+    const lon = parseFloat(form.longitude);
 
     if (
-      form.latitude.trim() === '' ||
-      form.longitude.trim() === '' ||
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180
+      Number.isNaN(lat) ||
+      Number.isNaN(lon) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180
     ) {
-      toast.error('Detect your location or enter valid coordinates.');
+      toast.error('Please provide valid geographic coordinates or use Auto-Detect.');
       return;
     }
 
@@ -292,343 +242,324 @@ export default function CreateReport() {
 
     try {
       const formData = new FormData();
-
-      formData.append('title', title);
-      formData.append('description', description);
+      formData.append('title', form.title.trim());
+      formData.append('description', form.description.trim());
       formData.append('category', form.category);
-      formData.append('address', address);
-      formData.append('latitude', String(latitude));
-      formData.append('longitude', String(longitude));
+      formData.append('priority', form.priority);
+      formData.append('address', form.address.trim());
+      formData.append('latitude', String(lat));
+      formData.append('longitude', String(lon));
 
-      selectedImages.forEach(({ file }) => {
-        formData.append('images', file);
+      selectedImages.forEach((img) => {
+        formData.append('images', img.file);
       });
 
-      const response = await api.post('/reports', formData);
+      const response = await api.post('/reports', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
-      if (response.data?.success === false) {
-        toast.error(
-          response.data.message || 'Failed to create report.'
-        );
-        return;
-      }
-
-      toast.success('Report created successfully.');
-      navigate('/reports');
-    } catch (error) {
-      console.error(
-        'Create report error:',
-        error.response?.data || error.message
+      toast.success('Report submitted successfully!');
+      const newId = response.data?.report?._id;
+      navigate(newId ? `/reports/${newId}` : '/citizen');
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || 'Failed to submit the report. Please try again.'
       );
-
-      const validationErrors = error.response?.data?.errors;
-
-      if (Array.isArray(validationErrors) && validationErrors.length) {
-        validationErrors.forEach((item) => {
-          toast.error(item.msg || 'Please check your report details.');
-        });
-      } else {
-        toast.error(
-          error.response?.data?.message ||
-            'Failed to create report. Please try again.'
-        );
-      }
     } finally {
       setLoading(false);
     }
   };
 
-  const busy = loading || locationLoading || addressLoading;
-
-  const buttonStyle = {
-    padding: '11px 14px',
-    border: 'none',
-    borderRadius: 8,
-    backgroundColor: '#0f766e',
-    color: '#ffffff',
-    fontWeight: 600,
-    cursor: busy ? 'not-allowed' : 'pointer',
-  };
-
   return (
-    <main
-      style={{
-        maxWidth: 700,
-        margin: '40px auto',
-        padding: 20,
-        fontFamily: 'Arial, sans-serif',
-        color: '#1f2937',
-      }}
-    >
-      <Link to="/reports">← Back to reports</Link>
+    <div className="create-report-page">
+      <Navbar />
 
-      <h1>Report a Community Issue</h1>
+      <main className="create-report-container">
+        <Link to="/reports" className="create-report-back">
+          ← Back to community reports
+        </Link>
 
-      <p>
-        Describe the issue, add photos if available, and provide its
-        location so your community can take action.
-      </p>
+        <section className="create-report-card">
+          <header className="create-report-header">
+            <span className="create-report-eyebrow">
+              <span aria-hidden="true">◎</span> Public Submission
+            </span>
+            <h1>Report a Community Issue</h1>
+            <p>
+              Spot an issue in your neighbourhood? Provide details and photos so municipal teams and community volunteers can take action.
+            </p>
+          </header>
 
-      <form
-        onSubmit={submit}
-        style={{ display: 'grid', gap: 14 }}
-      >
-        <label style={{ display: 'grid', gap: 6 }}>
-          Title
-          <input
-            name="title"
-            value={form.title}
-            onChange={updateField}
-            minLength={5}
-            maxLength={120}
-            required
-            placeholder="Enter a short title"
-          />
-        </label>
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          Description
-          <textarea
-            name="description"
-            value={form.description}
-            onChange={updateField}
-            minLength={10}
-            maxLength={3000}
-            rows={4}
-            required
-            placeholder="Describe the issue in detail"
-          />
-        </label>
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          Category
-          <select
-            name="category"
-            value={form.category}
-            onChange={updateField}
-            required
-          >
-            <option value="garbage">Garbage</option>
-            <option value="roads">Roads</option>
-            <option value="water">Water</option>
-            <option value="electricity">Electricity</option>
-            <option value="streetlight">Streetlight</option>
-            <option value="drainage">Drainage</option>
-            <option value="public-safety">Public safety</option>
-            <option value="other">Other</option>
-          </select>
-        </label>
-
-        {/* Photo upload section */}
-        <section style={photoSectionStyle}>
-          <h3 style={{ margin: 0 }}>Report Photos</h3>
-
-          <p style={helperTextStyle}>
-            Add up to 5 photos to help explain the issue. JPG, PNG,
-            and WebP are supported, with a maximum of 5 MB per photo.
-          </p>
-
-          <label style={uploadLabelStyle}>
-            <span>📷 Choose Photos</span>
-
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              onChange={handleImageSelection}
-              disabled={busy || selectedImages.length >= MAX_IMAGES}
-              style={{ display: 'block', marginTop: 10 }}
-            />
-          </label>
-
-          <p style={helperTextStyle}>
-            {selectedImages.length} of {MAX_IMAGES} photos selected
-          </p>
-
-          {selectedImages.length > 0 && (
-            <div style={photoGridStyle}>
-              {selectedImages.map((image, index) => (
-                <div key={image.id} style={photoCardStyle}>
-                  <img
-                    src={image.preview}
-                    alt={`Selected report photo ${index + 1}`}
-                    style={previewImageStyle}
-                  />
-
-                  <p style={fileNameStyle} title={image.file.name}>
-                    {image.file.name}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => removeImage(image.id)}
-                    disabled={busy}
-                    style={removeButtonStyle}
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+          <form onSubmit={submit} className="stack">
+            {/* Title */}
+            <div className="form-group">
+              <label htmlFor="report-title" className="field-label">
+                Issue Title *
+              </label>
+              <input
+                id="report-title"
+                name="title"
+                type="text"
+                required
+                minLength={5}
+                maxLength={120}
+                value={form.title}
+                onChange={updateField}
+                className="form-control"
+                placeholder="e.g. Broken streetlight on 4th Main Road"
+              />
+              <span className="form-help">Between 5 and 120 characters</span>
             </div>
-          )}
+
+            {/* Description */}
+            <div className="form-group">
+              <label htmlFor="report-desc" className="field-label">
+                Detailed Description *
+              </label>
+              <textarea
+                id="report-desc"
+                name="description"
+                required
+                minLength={10}
+                maxLength={3000}
+                rows={4}
+                value={form.description}
+                onChange={updateField}
+                className="form-control"
+                placeholder="Describe the severity, exact landmark, and any hazards..."
+              />
+              <span className="form-help">Minimum 10 characters</span>
+            </div>
+
+            {/* Category & Priority */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                gap: '16px',
+              }}
+            >
+              <div className="form-group">
+                <label htmlFor="report-cat" className="field-label">
+                  Issue Category *
+                </label>
+                <select
+                  id="report-cat"
+                  name="category"
+                  value={form.category}
+                  onChange={updateField}
+                  className="form-control"
+                  required
+                >
+                  <option value="garbage">Garbage / Waste Dump</option>
+                  <option value="roads">Road Damage / Potholes</option>
+                  <option value="water">Water Supply / Leakage</option>
+                  <option value="electricity">Power Grid / Transformer</option>
+                  <option value="streetlight">Streetlight Outage</option>
+                  <option value="drainage">Drainage / Sewage Clog</option>
+                  <option value="public-safety">Public Safety Hazard</option>
+                  <option value="other">Other Civic Concern</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="report-prio" className="field-label">
+                  Estimated Priority
+                </label>
+                <select
+                  id="report-prio"
+                  name="priority"
+                  value={form.priority}
+                  onChange={updateField}
+                  className="form-control"
+                >
+                  <option value="low">Low (Minor inconvenience)</option>
+                  <option value="medium">Medium (Standard civic issue)</option>
+                  <option value="high">High (Impacting many residents)</option>
+                  <option value="urgent">Urgent (Immediate safety risk)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Location & Coordinates */}
+            <div className="form-group">
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <label htmlFor="report-address" className="field-label">
+                  Street Address or Landmark
+                </label>
+                <button
+                  type="button"
+                  onClick={detectLocation}
+                  disabled={locationLoading}
+                  className="btn btn-sm btn-outline"
+                >
+                  {locationLoading ? 'Detecting...' : '📍 Auto-Detect Location'}
+                </button>
+              </div>
+
+              <input
+                id="report-address"
+                name="address"
+                type="text"
+                maxLength={300}
+                value={form.address}
+                onChange={updateField}
+                className="form-control"
+                placeholder="e.g. Opposite Community Park, 12th Cross"
+              />
+            </div>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '14px',
+              }}
+            >
+              <div className="form-group">
+                <label htmlFor="report-lat" className="field-label">
+                  Latitude *
+                </label>
+                <input
+                  id="report-lat"
+                  name="latitude"
+                  type="number"
+                  step="any"
+                  required
+                  value={form.latitude}
+                  onChange={updateField}
+                  className="form-control"
+                  placeholder="e.g. 12.9716"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="report-lon" className="field-label">
+                  Longitude *
+                </label>
+                <input
+                  id="report-lon"
+                  name="longitude"
+                  type="number"
+                  step="any"
+                  required
+                  value={form.longitude}
+                  onChange={updateField}
+                  className="form-control"
+                  placeholder="e.g. 77.5946"
+                />
+              </div>
+            </div>
+
+            {/* Interactive Map Pin Picker */}
+            <div className="form-group">
+              <label className="field-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Interactive Map Picker (Click to drop pin)</span>
+                <span style={{ fontSize: '12px', color: 'var(--color-primary)', fontWeight: 700 }}>
+                  {form.latitude && form.longitude ? `📍 ${form.latitude}, ${form.longitude}` : 'Tap map to drop pin'}
+                </span>
+              </label>
+
+              <div
+                style={{
+                  height: '260px',
+                  width: '100%',
+                  borderRadius: 'var(--radius-sm)',
+                  overflow: 'hidden',
+                  border: '1px solid var(--color-border)',
+                  boxShadow: 'var(--shadow-xs)',
+                }}
+              >
+                <MapContainer
+                  center={[
+                    form.latitude && !Number.isNaN(parseFloat(form.latitude))
+                      ? parseFloat(form.latitude)
+                      : 20.5937,
+                    form.longitude && !Number.isNaN(parseFloat(form.longitude))
+                      ? parseFloat(form.longitude)
+                      : 78.9629,
+                  ]}
+                  zoom={form.latitude && form.longitude ? 15 : 4}
+                  scrollWheelZoom={false}
+                  style={{ height: '100%', width: '100%' }}
+                >
+                  <MapLocationPicker
+                    latitude={form.latitude}
+                    longitude={form.longitude}
+                    onLocationSelect={handleMapLocationSelect}
+                  />
+                </MapContainer>
+              </div>
+              <span className="form-help">
+                Click anywhere on the map to position the report pin accurately. Landmark and GPS coordinates will sync automatically.
+              </span>
+            </div>
+
+            {/* Photos Upload */}
+            <div className="form-group">
+              <label className="field-label">
+                Upload Photos (Up to {MAX_IMAGES})
+              </label>
+
+              <label className="create-dropzone">
+                <span className="create-dropzone-icon" aria-hidden="true">📷</span>
+                <span style={{ fontWeight: 700, display: 'block', color: 'var(--color-navy)' }}>
+                  Click or drag photos here
+                </span>
+                <span className="form-help">
+                  Supports JPG, PNG, WebP up to 5 MB per photo
+                </span>
+
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  multiple
+                  onChange={handleImageSelection}
+                  disabled={loading || selectedImages.length >= MAX_IMAGES}
+                  style={{ display: 'none' }}
+                />
+              </label>
+
+              {selectedImages.length > 0 && (
+                <div className="create-thumbs-grid">
+                  {selectedImages.map((image) => (
+                    <div key={image.id} className="create-thumb-box">
+                      <img
+                        src={image.preview}
+                        alt="Preview upload"
+                        className="create-thumb-img"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeImage(image.id)}
+                        className="create-thumb-remove"
+                        title="Remove photo"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary auth-submit"
+              style={{ width: '100%', marginTop: '12px' }}
+            >
+              {loading ? 'Uploading & Creating Report...' : 'Submit Community Report →'}
+            </button>
+          </form>
         </section>
-
-        <section style={locationSectionStyle}>
-          <h3 style={{ margin: 0 }}>Report Location</h3>
-
-          <button
-            type="button"
-            onClick={getCurrentLocation}
-            disabled={busy}
-            style={buttonStyle}
-          >
-            {locationLoading
-              ? 'Detecting location...'
-              : '📍 Use My Current Location'}
-          </button>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            Latitude
-            <input
-              name="latitude"
-              type="number"
-              min="-90"
-              max="90"
-              step="any"
-              value={form.latitude}
-              onChange={updateField}
-              required
-              placeholder="Example: 17.3850"
-            />
-          </label>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            Longitude
-            <input
-              name="longitude"
-              type="number"
-              min="-180"
-              max="180"
-              step="any"
-              value={form.longitude}
-              onChange={updateField}
-              required
-              placeholder="Example: 78.4867"
-            />
-          </label>
-
-          <button
-            type="button"
-            onClick={findAddress}
-            disabled={busy}
-            style={{
-              ...buttonStyle,
-              backgroundColor: '#2563eb',
-            }}
-          >
-            {addressLoading ? 'Finding address...' : 'Find Address'}
-          </button>
-
-          <label style={{ display: 'grid', gap: 6 }}>
-            Street Address
-            <textarea
-              name="address"
-              value={form.address}
-              onChange={updateField}
-              maxLength={300}
-              rows={3}
-              placeholder="Address will appear here. You can edit it."
-            />
-          </label>
-
-          <p style={helperTextStyle}>
-            Address lookup uses OpenStreetMap Nominatim. Results may be
-            approximate. You can edit the address before submitting.
-          </p>
-        </section>
-
-        <button
-          type="submit"
-          disabled={busy}
-          style={{
-            ...buttonStyle,
-            backgroundColor: busy ? '#94a3b8' : '#2563eb',
-          }}
-        >
-          {loading ? 'Submitting report and photos...' : 'Submit Report'}
-        </button>
-      </form>
-    </main>
+      </main>
+    </div>
   );
 }
-
-const photoSectionStyle = {
-  padding: 16,
-  border: '1px solid #e2e8f0',
-  borderRadius: 10,
-  background: '#fff',
-  display: 'grid',
-  gap: 12,
-};
-
-const uploadLabelStyle = {
-  padding: 14,
-  border: '1px dashed #94a3b8',
-  borderRadius: 8,
-  background: '#f8fafc',
-};
-
-const photoGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-  gap: 12,
-};
-
-const photoCardStyle = {
-  minWidth: 0,
-  padding: 8,
-  border: '1px solid #e2e8f0',
-  borderRadius: 8,
-  background: '#fff',
-};
-
-const previewImageStyle = {
-  display: 'block',
-  width: '100%',
-  height: 120,
-  objectFit: 'cover',
-  borderRadius: 6,
-};
-
-const fileNameStyle = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap',
-  fontSize: 12,
-};
-
-const removeButtonStyle = {
-  width: '100%',
-  padding: '7px 10px',
-  border: '1px solid #fecaca',
-  borderRadius: 6,
-  background: '#fef2f2',
-  color: '#b91c1c',
-  cursor: 'pointer',
-};
-
-const locationSectionStyle = {
-  padding: 16,
-  border: '1px solid #dbeafe',
-  borderRadius: 10,
-  background: '#f8fafc',
-  display: 'grid',
-  gap: 12,
-};
-
-const helperTextStyle = {
-  margin: 0,
-  fontSize: 12,
-  lineHeight: 1.6,
-  color: '#64748b',
-};

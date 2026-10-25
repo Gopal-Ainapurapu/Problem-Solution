@@ -1,254 +1,251 @@
+/* ==========================================================================
+   CitizenDashboard.css — Modern Classic Citizen Dashboard Styles
+   ========================================================================== */
+
+.citizen-page {
+  min-height: 100vh;
+  background: var(--color-background);
+  color: var(--color-text);
+}
+
 .citizen-dashboard {
-  max-width: 1100px;
+  width: min(1200px, calc(100% - 48px));
   margin: 0 auto;
-  padding: 32px 20px;
-  color: #1f2937;
-  font-family: Inter, system-ui, sans-serif;
+  padding: 36px 0 64px;
 }
 
 .citizen-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: 20px;
-  margin-bottom: 28px;
+  gap: 24px;
+  margin-bottom: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.citizen-header-copy {
+  max-width: 680px;
 }
 
 .citizen-eyebrow {
-  color: #3563e9;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-primary);
   font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 1.2px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
 }
 
 .citizen-header h1 {
-  margin: 8px 0;
-  font-size: clamp(26px, 4vw, 34px);
-  letter-spacing: -0.8px;
+  margin: 0 0 8px;
+  font-family: var(--font-heading);
+  font-size: clamp(1.85rem, 3.2vw, 2.4rem);
+  font-weight: 800;
+  color: var(--color-text);
+  letter-spacing: -0.03em;
 }
 
-.citizen-header p:not(.citizen-eyebrow),
-.citizen-section-header p {
-  color: #64748b;
+.citizen-header-description {
+  margin: 0;
+  color: var(--color-secondary);
+  font-size: 15px;
   line-height: 1.6;
 }
 
-.citizen-primary-button {
-  display: inline-block;
-  padding: 12px 16px;
-  border-radius: 9px;
-  background: #3563e9;
-  color: #fff;
-  text-decoration: none;
-  font-size: 14px;
-  font-weight: 600;
+.citizen-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
+/* 4 Summary Stat Cards */
 .citizen-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
   margin-bottom: 32px;
 }
 
-.citizen-stat-card,
-.citizen-report-section {
-  border: 1px solid #e2e8f0;
-  border-radius: 13px;
-  background: #fff;
-}
-
 .citizen-stat-card {
-  padding: 20px;
+  padding: 22px 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+  transition: border-color var(--transition);
 }
 
-.citizen-stat-card p {
-  margin: 0;
-  color: #64748b;
-  font-size: 13px;
+.citizen-stat-card:hover {
+  border-color: var(--color-border-hover);
 }
 
-.citizen-stat-card h2 {
-  margin: 12px 0 0;
-  font-size: 30px;
-}
-
-.citizen-section-header {
+.citizen-stat-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  padding: 22px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.citizen-section-header h2 {
-  margin: 0;
-}
-
-.citizen-section-header p {
-  margin-bottom: 0;
-  font-size: 13px;
-}
-
-.citizen-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.citizen-controls select,
-.citizen-controls button {
-  padding: 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: white;
-  color: #334155;
-}
-
-.citizen-controls button {
-  cursor: pointer;
-}
-
-.citizen-report-list {
-  display: grid;
-  gap: 0;
-}
-
-.citizen-report-card {
-  padding: 22px;
-  border-bottom: 1px solid #edf0f5;
-}
-
-.citizen-report-card:last-child {
-  border-bottom: 0;
-}
-
-.citizen-report-top {
-  display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  flex-wrap: wrap;
+  margin-bottom: 10px;
 }
 
-.citizen-report-top h3 {
-  margin: 12px 0 8px;
+.citizen-stat-label {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.citizen-stat-icon {
   font-size: 18px;
 }
 
-.citizen-report-description {
-  max-width: 750px;
-  color: #64748b;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
+.citizen-stat-value {
+  margin: 0 0 4px;
+  font-family: var(--font-heading);
+  font-size: clamp(1.75rem, 2.8vw, 2.2rem);
+  font-weight: 850;
+  color: var(--color-text);
+  line-height: 1.15;
 }
 
-.citizen-category {
-  padding: 6px 10px;
-  border-radius: 8px;
-  background: #f1f5f9;
-  color: #475569;
+.citizen-stat-note {
+  margin: 0;
+  color: var(--color-secondary);
   font-size: 12px;
 }
 
-.citizen-status {
-  display: inline-block;
-  padding: 5px 9px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.citizen-status-pending {
-  background: #fff3d6;
-  color: #996500;
-}
-
-.citizen-status-verified {
-  background: #e3edff;
-  color: #2454bd;
-}
-
-.citizen-status-assigned {
-  background: #eee7ff;
-  color: #6b3cc8;
-}
-
-.citizen-status-in-progress {
-  background: #dff5ff;
-  color: #08769b;
-}
-
-.citizen-status-resolved {
-  background: #dff7e9;
-  color: #167447;
-}
-
-.citizen-status-rejected {
-  background: #ffe5e7;
-  color: #b42332;
-}
-
-.citizen-location {
-  color: #64748b;
-  font-size: 13px;
-}
-
-.citizen-resolution {
-  margin-top: 16px;
-  padding: 14px;
-  border-radius: 9px;
-  background: #f0fdf4;
-  color: #166534;
-}
-
-.citizen-resolution p {
-  margin-bottom: 0;
-  line-height: 1.6;
-}
-
-.citizen-report-footer {
+/* Filter & Search Bar */
+.citizen-filter-bar {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 28px;
+  padding: 16px 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
+}
+
+.citizen-search-box {
+  width: 100%;
+}
+
+.citizen-filter-pills {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 20px;
-  padding-top: 14px;
-  border-top: 1px solid #edf0f5;
-  color: #64748b;
-  font-size: 12px;
+  gap: 8px;
 }
 
-.citizen-report-footer a {
-  color: #3563e9;
-  font-weight: 600;
+/* Reports Grid */
+.citizen-reports-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 20px;
+}
+
+.citizen-report-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 24px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-xs);
   text-decoration: none;
+  transition: all var(--transition);
 }
 
-.citizen-empty {
-  padding: 38px 20px;
-  color: #64748b;
-  text-align: center;
+.citizen-report-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-md);
 }
 
-.citizen-empty h3 {
-  color: #1f2937;
+.citizen-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.citizen-card-category {
+  padding: 4px 10px;
+  background: var(--color-soft-green);
+  border-radius: var(--radius-xs);
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.citizen-card-title {
+  margin: 0 0 10px;
+  font-family: var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 750;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.citizen-card-desc {
+  margin: 0 0 18px;
+  color: var(--color-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.citizen-card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-secondary);
+}
+
+.citizen-card-address {
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.citizen-card-arrow {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .citizen-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 600px) {
-  .citizen-dashboard {
-    padding: 22px 12px;
+  .citizen-stats {
+    grid-template-columns: 1fr;
   }
-
-  .citizen-section-header,
-  .citizen-report-card {
-    padding: 16px;
+  .citizen-reports-grid {
+    grid-template-columns: 1fr;
   }
-
-  .citizen-report-footer {
+  .citizen-header {
     flex-direction: column;
+    align-items: stretch;
   }
 }

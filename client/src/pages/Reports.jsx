@@ -1,17 +1,9 @@
-
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api';
-
-const statusColors = {
-  pending: '#f59e0b',
-  verified: '#3b82f6',
-  assigned: '#8b5cf6',
-  'in-progress': '#0d9488',
-  resolved: '#16a34a',
-  rejected: '#ef4444',
-};
+import Navbar from '../components/Navbar';
+import './Reports.css';
 
 const categories = [
   'garbage',
@@ -33,7 +25,22 @@ const statuses = [
   'rejected',
 ];
 
-// Returns the distance between two coordinates in kilometres.
+const formatStatus = (status) => {
+  if (!status) return 'Unknown';
+  return status
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
+const formatCategory = (category) => {
+  if (!category) return 'Other';
+  return category
+    .split('-')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const toRadians = (degrees) => (degrees * Math.PI) / 180;
   const earthRadiusKm = 6371;
@@ -48,7 +55,6 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
       Math.sin(dLon / 2) ** 2;
 
   const safeA = Math.min(1, Math.max(0, a));
-
   return (
     2 *
     earthRadiusKm *
@@ -56,30 +62,22 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   );
 }
 
-// Report coordinates are stored as GeoJSON: [longitude, latitude].
 function getReportCoordinates(report) {
   const coordinates = report.location?.coordinates;
-
   if (!Array.isArray(coordinates) || coordinates.length < 2) {
     return null;
   }
 
   const [longitude, latitude] = coordinates;
-
   if (
     typeof latitude !== 'number' ||
     typeof longitude !== 'number' ||
     !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude) ||
-    latitude < -90 ||
-    latitude > 90 ||
-    longitude < -180 ||
-    longitude > 180
+    !Number.isFinite(longitude)
   ) {
     return null;
   }
 
-  // [0, 0] is a valid geographic coordinate, so do not reject it.
   return { latitude, longitude };
 }
 
@@ -89,6 +87,7 @@ export default function Reports() {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  const [selectedPriority, setSelectedPriority] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
   const [userLocation, setUserLocation] = useState(null);
   const [locating, setLocating] = useState(false);
@@ -98,7 +97,7 @@ export default function Reports() {
 
     const fetchReports = async () => {
       try {
-        const response = await api.get('/reports');
+        const response = await api.get('/reports', { params: { limit: 50 } });
         const data = response.data;
 
         const reportList = Array.isArray(data)
@@ -146,26 +145,19 @@ export default function Reports() {
         });
         setSortBy('nearby');
         setLocating(false);
-        toast.success('Reports sorted by distance.');
+        toast.success('Reports sorted by distance from your location.');
       },
       (error) => {
         setLocating(false);
-
         if (error.code === error.PERMISSION_DENIED) {
           toast.error(
-            'Location permission was denied. Allow location access in your browser settings.'
+            'Location permission was denied. Allow location in browser settings.'
           );
-        } else if (error.code === error.TIMEOUT) {
-          toast.error('Location request timed out. Please try again.');
         } else {
-          toast.error('Unable to get your location. Please try again.');
+          toast.error('Unable to fetch your location.');
         }
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 60000,
-      }
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
     );
   };
 
@@ -188,14 +180,15 @@ export default function Reports() {
           !normalizedSearch || searchableText.includes(normalizedSearch);
 
         const matchesCategory =
-          selectedCategory === 'all' ||
-          report.category === selectedCategory;
+          selectedCategory === 'all' || report.category === selectedCategory;
 
         const matchesStatus =
-          selectedStatus === 'all' ||
-          report.status === selectedStatus;
+          selectedStatus === 'all' || report.status === selectedStatus;
 
-        return matchesSearch && matchesCategory && matchesStatus;
+        const matchesPriority =
+          selectedPriority === 'all' || report.priority === selectedPriority;
+
+        return matchesSearch && matchesCategory && matchesStatus && matchesPriority;
       })
       .map((report) => {
         if (!userLocation) {
@@ -203,7 +196,6 @@ export default function Reports() {
         }
 
         const coordinates = getReportCoordinates(report);
-
         const distanceKm = coordinates
           ? calculateDistance(
               userLocation.latitude,
@@ -223,9 +215,7 @@ export default function Reports() {
         return a.distanceKm - b.distanceKm;
       });
     } else if (sortBy === 'title') {
-      results.sort((a, b) =>
-        (a.title || '').localeCompare(b.title || '')
-      );
+      results.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
     } else if (sortBy === 'newest') {
       results.sort(
         (a, b) =>
@@ -240,6 +230,7 @@ export default function Reports() {
     search,
     selectedCategory,
     selectedStatus,
+    selectedPriority,
     sortBy,
     userLocation,
   ]);
@@ -248,333 +239,234 @@ export default function Reports() {
     setSearch('');
     setSelectedCategory('all');
     setSelectedStatus('all');
+    setSelectedPriority('all');
     setSortBy('newest');
     setUserLocation(null);
   };
 
-  const inputStyle = {
-    width: '100%',
-    padding: '11px 12px',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    background: '#fff',
-    color: '#111827',
-    fontSize: 14,
-    boxSizing: 'border-box',
-  };
-
-  const buttonStyle = {
-    padding: '10px 14px',
-    border: '1px solid #d1d5db',
-    borderRadius: 8,
-    background: '#fff',
-    color: '#111827',
-    cursor: 'pointer',
-    fontSize: 14,
-  };
-
   return (
-    <main
-      style={{
-        maxWidth: 1100,
-        margin: '40px auto',
-        padding: 20,
-        fontFamily: 'Arial, sans-serif',
-        color: '#111827',
-      }}
-    >
-      <header
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 16,
-          flexWrap: 'wrap',
-        }}
-      >
-        <div>
-          <h1>Community Reports</h1>
-          <p style={{ color: '#6b7280' }}>
-            Find, filter and track issues in your community.
-          </p>
-        </div>
+    <div className="reports-page">
+      <Navbar />
 
-        <Link
-          to="/reports/new"
-          style={{
-            background: '#2563eb',
-            color: '#fff',
-            padding: '10px 16px',
-            borderRadius: 8,
-            textDecoration: 'none',
-          }}
-        >
-          + Create Report
-        </Link>
-      </header>
+      <main className="reports-container">
+        <header className="reports-header">
+          <div className="reports-header-copy">
+            <span className="reports-eyebrow">
+              <span aria-hidden="true">◎</span> Community Transparency
+            </span>
+            <h1>Community Reports</h1>
+            <p className="reports-header-description">
+              Browse, filter, and track neighbourhood issues reported by local residents. See what's being actively resolved.
+            </p>
+          </div>
 
-      <section
-        style={{
-          marginTop: 24,
-          padding: 18,
-          border: '1px solid #e5e7eb',
-          borderRadius: 12,
-          background: '#f9fafb',
-        }}
-      >
-        <h2 style={{ fontSize: 18, marginTop: 0 }}>
-          Search and filter
-        </h2>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <Link to="/reports-map" className="btn btn-outline">
+              🗺️ Map View
+            </Link>
+            <Link to="/reports/new" className="btn btn-primary">
+              + Report an Issue
+            </Link>
+          </div>
+        </header>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
-            gap: 14,
-          }}
-        >
-          <label style={{ fontSize: 13, fontWeight: 600 }}>
-            Search reports
+        {/* Filter Controls Panel */}
+        <section className="reports-controls-panel">
+          <div className="reports-search-row">
             <input
-              type="search"
+              type="text"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search title, details, address..."
-              style={{ ...inputStyle, marginTop: 7 }}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search reports by title, description or address..."
+              className="search-input reports-search-input"
             />
-          </label>
 
-          <label style={{ fontSize: 13, fontWeight: 600 }}>
-            Category
-            <select
-              value={selectedCategory}
-              onChange={(event) => setSelectedCategory(event.target.value)}
-              style={{ ...inputStyle, marginTop: 7 }}
+            <button
+              type="button"
+              onClick={handleNearbyClick}
+              disabled={locating}
+              className={`btn btn-outline ${sortBy === 'nearby' ? 'active' : ''}`}
             >
-              <option value="all">All categories</option>
-              {categories.map((category) => (
-                <option key={category} value={category}>
-                  {category.replaceAll('-', ' ')}
-                </option>
-              ))}
-            </select>
-          </label>
+              {locating ? 'Locating...' : '📍 Near Me'}
+            </button>
 
-          <label style={{ fontSize: 13, fontWeight: 600 }}>
-            Status
-            <select
-              value={selectedStatus}
-              onChange={(event) => setSelectedStatus(event.target.value)}
-              style={{ ...inputStyle, marginTop: 7 }}
-            >
-              <option value="all">All statuses</option>
-              {statuses.map((status) => (
-                <option key={status} value={status}>
-                  {status.replaceAll('-', ' ')}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label style={{ fontSize: 13, fontWeight: 600 }}>
-            Sort by
-            <select
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
-              style={{ ...inputStyle, marginTop: 7 }}
-            >
-              <option value="newest">Newest first</option>
-              <option value="title">Title (A–Z)</option>
-              {userLocation && (
-                <option value="nearby">Nearest first</option>
-              )}
-            </select>
-          </label>
-        </div>
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 10,
-            flexWrap: 'wrap',
-            marginTop: 16,
-          }}
-        >
-          <button
-            type="button"
-            onClick={handleNearbyClick}
-            disabled={locating}
-            style={{
-              ...buttonStyle,
-              background: '#0f766e',
-              color: '#fff',
-              borderColor: '#0f766e',
-              opacity: locating ? 0.7 : 1,
-            }}
-          >
-            {locating
-              ? 'Getting location...'
-              : userLocation
-                ? '↻ Refresh nearby location'
-                : '📍 Find nearby reports'}
-          </button>
-
-          <button
-            type="button"
-            onClick={resetFilters}
-            style={buttonStyle}
-          >
-            Clear filters
-          </button>
-        </div>
-
-        {userLocation && (
-          <p style={{ color: '#047857', fontSize: 13, marginBottom: 0 }}>
-            Location enabled. Reports with coordinates are sorted by distance.
-          </p>
-        )}
-      </section>
-
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: 12,
-          flexWrap: 'wrap',
-          margin: '22px 0 16px',
-          color: '#4b5563',
-        }}
-      >
-        <span>
-          Showing <strong>{filteredReports.length}</strong> of{' '}
-          <strong>{reports.length}</strong> report(s)
-        </span>
-
-        {sortBy === 'nearby' && userLocation && (
-          <span>Sorted by distance from your location</span>
-        )}
-      </div>
-
-      {loading ? (
-        <p>Loading reports...</p>
-      ) : filteredReports.length === 0 ? (
-        <section
-          style={{
-            textAlign: 'center',
-            padding: 36,
-            border: '1px dashed #d1d5db',
-            borderRadius: 12,
-          }}
-        >
-          <h2 style={{ fontSize: 20 }}>No matching reports</h2>
-          <p style={{ color: '#6b7280' }}>
-            Try another search term or change your filters.
-          </p>
-          <button type="button" onClick={resetFilters} style={buttonStyle}>
-            Clear filters
-          </button>
-        </section>
-      ) : (
-        <section
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-            gap: 18,
-          }}
-        >
-          {filteredReports.map((report) => (
-            <article
-              key={report._id}
-              style={{
-                border: '1px solid #e5e7eb',
-                borderRadius: 12,
-                padding: 18,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                display: 'flex',
-                flexDirection: 'column',
-                minWidth: 0,
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                }}
+            {(search || selectedCategory !== 'all' || selectedStatus !== 'all' || selectedPriority !== 'all' || sortBy !== 'newest') && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="btn btn-outline"
+                title="Reset filters"
               >
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: '#6b7280',
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {(report.category || 'other').replaceAll('-', ' ')}
-                </span>
+                ✕ Clear Filters
+              </button>
+            )}
+          </div>
 
-                <span
-                  style={{
-                    background: statusColors[report.status] || '#6b7280',
-                    color: '#fff',
-                    padding: '4px 8px',
-                    borderRadius: 20,
-                    fontSize: 12,
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {(report.status || 'unknown').replaceAll('-', ' ')}
-                </span>
-              </div>
-
-              <h2 style={{ fontSize: 20, overflowWrap: 'anywhere' }}>
-                {report.title || 'Untitled report'}
-              </h2>
-
-              <p
-                style={{
-                  color: '#4b5563',
-                  lineHeight: 1.5,
-                  overflowWrap: 'anywhere',
-                  whiteSpace: 'pre-wrap',
-                }}
+          <div className="reports-filter-row">
+            <div className="reports-category-pills">
+              <button
+                type="button"
+                onClick={() => setSelectedCategory('all')}
+                className={`category-pill ${selectedCategory === 'all' ? 'active' : ''}`}
               >
-                {report.description || 'No description provided.'}
-              </p>
+                All Categories
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`category-pill ${selectedCategory === cat ? 'active' : ''}`}
+                >
+                  {formatCategory(cat)}
+                </button>
+              ))}
+            </div>
 
-              {report.address && (
-                <p style={{ overflowWrap: 'anywhere' }}>
-                  📍 {report.address}
-                </p>
-              )}
+            <div className="reports-dropdowns">
+              <select
+                value={selectedPriority}
+                onChange={(e) => setSelectedPriority(e.target.value)}
+                className="reports-select"
+                aria-label="Filter by priority"
+              >
+                <option value="all">All Priorities</option>
+                <option value="urgent">🚨 Urgent Priority</option>
+                <option value="high">⚠️ High Priority</option>
+                <option value="medium">⏺ Medium Priority</option>
+                <option value="low">⚪ Low Priority</option>
+              </select>
 
-              {sortBy === 'nearby' && userLocation && (
-                <p style={{ color: '#0f766e', fontSize: 14 }}>
-                  <strong>Distance:</strong>{' '}
-                  {report.distanceKm === null
-                    ? 'Location unavailable'
-                    : report.distanceKm < 1
-                      ? `${Math.round(report.distanceKm * 1000)} m away`
-                      : `${report.distanceKm.toFixed(2)} km away`}
-                </p>
-              )}
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="reports-select"
+                aria-label="Filter by status"
+              >
+                <option value="all">All Statuses</option>
+                {statuses.map((st) => (
+                  <option key={st} value={st}>
+                    {formatStatus(st)}
+                  </option>
+                ))}
+              </select>
 
-              {report.priority && (
-                <p>
-                  <strong>Priority:</strong> {report.priority}
-                </p>
-              )}
-
-              <div style={{ marginTop: 'auto', paddingTop: 12 }}>
-                <Link to={`/reports/${report._id}`}>
-                  View details →
-                </Link>
-              </div>
-            </article>
-          ))}
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="reports-select"
+                aria-label="Sort reports"
+              >
+                <option value="newest">Sort: Newest First</option>
+                <option value="title">Sort: Title A–Z</option>
+                {userLocation && <option value="nearby">Sort: Closest to Me</option>}
+              </select>
+            </div>
+          </div>
         </section>
-      )}
-    </main>
+
+        {/* Reports Grid View */}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+            <div className="loading-spinner" style={{ margin: '0 auto 16px' }} />
+            <p className="text-muted">Loading community reports...</p>
+          </div>
+        ) : filteredReports.length === 0 ? (
+          <div className="empty-state">
+            <h3>No reports match your filters</h3>
+            <p>Try searching for a different keyword or resetting your filters.</p>
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="btn btn-primary"
+              style={{ marginTop: '16px' }}
+            >
+              Reset Filters
+            </button>
+          </div>
+        ) : (
+          <div className="reports-grid">
+            {filteredReports.map((report) => (
+              <Link
+                key={report._id}
+                to={`/reports/${report._id}`}
+                className="report-card"
+              >
+                <div>
+                  <div className="report-card-header">
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span className="citizen-card-category">
+                        {formatCategory(report.category)}
+                      </span>
+                      {report.priority && (
+                        <span className={`priority-badge priority-${report.priority}`}>
+                          {report.priority === 'urgent' && '🚨 Urgent'}
+                          {report.priority === 'high' && '⚠️ High'}
+                          {report.priority === 'medium' && '⏺ Medium'}
+                          {report.priority === 'low' && '⚪ Low'}
+                        </span>
+                      )}
+                    </div>
+                    <span className={`status-badge status-${report.status || 'pending'}`}>
+                      {formatStatus(report.status)}
+                    </span>
+                  </div>
+
+                  <h3 className="report-card-title">{report.title}</h3>
+                  <p className="report-card-description">{report.description}</p>
+
+                  {/* Thumbnail Previews if images exist */}
+                  {Array.isArray(report.images) && report.images.length > 0 && (
+                    <div className="report-card-images">
+                      {report.images.slice(0, 3).map((img, i) => (
+                        <img
+                          key={i}
+                          src={img}
+                          alt="Thumbnail preview"
+                          className="report-card-thumb"
+                        />
+                      ))}
+                      {report.images.length > 3 && (
+                        <div
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            borderRadius: '8px',
+                            background: '#fff0e4',
+                            border: '1px solid var(--color-border)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            fontWeight: 700,
+                            color: 'var(--color-primary-dark)',
+                          }}
+                        >
+                          +{report.images.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="report-card-footer">
+                  <span title={report.address || 'Address provided'}>
+                    📍 {report.address || 'Location on map'}
+                  </span>
+
+                  {report.distanceKm !== null && (
+                    <span className="report-card-distance">
+                      {report.distanceKm < 1
+                        ? `${Math.round(report.distanceKm * 1000)} m away`
+                        : `${report.distanceKm.toFixed(1)} km away`}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
   );
 }

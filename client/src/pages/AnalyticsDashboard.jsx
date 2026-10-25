@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './AnalyticsDashboard.css';
@@ -21,24 +20,24 @@ import toast from 'react-hot-toast';
 import api from '../api';
 
 const STATUS_COLORS = {
-  pending: '#D97706',
-  verified: '#2563EB',
-  assigned: '#7C3AED',
-  'in-progress': '#0891B2',
-  resolved: '#16A34A',
-  rejected: '#DC2626',
+  pending: '#A96816',
+  verified: '#386A91',
+  assigned: '#593A8B',
+  'in-progress': '#C49A55',
+  resolved: '#287A52',
+  rejected: '#B83A3A',
 };
 
-const CATEGORY_LABELS = {
-  garbage: 'Garbage',
-  roads: 'Roads',
-  water: 'Water',
-  electricity: 'Electricity',
-  streetlight: 'Streetlight',
-  drainage: 'Drainage',
-  'public-safety': 'Public Safety',
-  other: 'Other',
-};
+const CATEGORY_COLORS = [
+  '#24483D',
+  '#C49A55',
+  '#287A52',
+  '#386A91',
+  '#593A8B',
+  '#A96816',
+  '#69736D',
+  '#19382F',
+];
 
 const formatLabel = (value = '') =>
   value
@@ -81,11 +80,13 @@ function ChartPanel({ title, description, children }) {
 export default function AnalyticsDashboard() {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
-  const loadAnalytics = useCallback(async () => {
-    setLoading(true);
-    setLoadError(false);
+  const loadAnalytics = useCallback(async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    }
 
     try {
       const response = await api.get('/reports/analytics');
@@ -96,6 +97,7 @@ export default function AnalyticsDashboard() {
       }
 
       setAnalytics(data);
+      setLoadError(false);
     } catch (error) {
       setLoadError(true);
       toast.error(
@@ -104,12 +106,43 @@ export default function AnalyticsDashboard() {
       );
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    loadAnalytics();
-  }, [loadAnalytics]);
+    let ignore = false;
+
+    async function init() {
+      try {
+        const response = await api.get('/reports/analytics');
+        const data = response.data?.analytics;
+
+        if (!ignore && response.data?.success && data) {
+          setAnalytics(data);
+          setLoadError(false);
+        }
+      } catch (error) {
+        if (!ignore) {
+          setLoadError(true);
+          toast.error(
+            error.response?.data?.message ||
+              'Unable to load analytics. Check your admin access.'
+          );
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+
+    init();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const statuses = analytics?.statusCounts || {};
   const statusData = Object.entries(statuses).map(([status, count]) => ({
@@ -119,220 +152,211 @@ export default function AnalyticsDashboard() {
   }));
 
   const categoryData = (analytics?.categoryCounts || []).map((item) => ({
-    name: CATEGORY_LABELS[item.category] || formatLabel(item.category),
+    name: formatLabel(item.category),
     count: item.count,
   }));
 
   const monthlyData = (analytics?.monthlyReports || []).map((item) => ({
-    ...item,
-    monthLabel: formatMonth(item.month),
+    name: formatMonth(item.month),
+    reports: item.reports,
   }));
 
   const resolutionHours = analytics?.resolution?.averageHours;
+  const resolutionDisplay =
+    resolutionHours === null || resolutionHours === undefined
+      ? 'N/A'
+      : resolutionHours < 24
+        ? `${resolutionHours} hrs`
+        : `${Math.round((resolutionHours / 24) * 10) / 10} days`;
 
   return (
     <main className="analytics-page">
       <header className="analytics-topbar">
         <div>
-          <p className="analytics-eyebrow">LocalLens / Insights</p>
-          <h1>Analytics Dashboard</h1>
+          <span className="analytics-eyebrow">Municipal Intelligence</span>
+          <h1>Analytics & Trends</h1>
           <p className="analytics-description">
-            Understand community reports, issue categories, and resolution
-            performance.
+            City-wide insights on report velocity, resolution efficiency, category distributions, and multi-month community trends.
           </p>
         </div>
 
         <div className="analytics-header-actions">
-          <Link to="/admin" className="analytics-secondary-button">
-            Admin dashboard
+          <Link to="/admin" className="btn btn-outline">
+            ← Admin Console
           </Link>
           <button
             type="button"
-            className="analytics-primary-button"
-            onClick={loadAnalytics}
-            disabled={loading}
+            onClick={() => loadAnalytics(true)}
+            disabled={refreshing || loading}
+            className="btn btn-primary"
           >
-            {loading ? 'Loading...' : 'Refresh data'}
+            {refreshing ? 'Refreshing...' : '↻ Refresh Data'}
           </button>
         </div>
       </header>
 
-      {loading && !analytics ? (
-        <div className="analytics-message">Loading analytics...</div>
-      ) : loadError && !analytics ? (
-        <section className="analytics-message analytics-error">
-          <h2>Analytics could not be loaded</h2>
-          <p>
-            Confirm that the backend is running, the analytics endpoint exists,
-            and you are logged in with an admin account.
-          </p>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+          <div className="loading-spinner" style={{ margin: '0 auto 16px' }} />
+          <p className="text-muted">Loading municipal analytics data...</p>
+        </div>
+      ) : loadError || !analytics ? (
+        <div className="empty-state">
+          <h3>Unable to load analytics</h3>
+          <p>Please confirm your account has administrator privileges.</p>
           <button
             type="button"
-            className="analytics-primary-button"
-            onClick={loadAnalytics}
+            onClick={() => loadAnalytics(true)}
+            className="btn btn-primary"
+            style={{ marginTop: '16px' }}
           >
-            Try again
+            Try Again
           </button>
-        </section>
+        </div>
       ) : (
         <>
-          {loadError && (
-            <p className="analytics-warning">
-              Refresh failed. Showing the last successfully loaded data.
-            </p>
-          )}
-
-          <section className="analytics-stats-grid">
+          {/* Summary KPIs */}
+          <section className="analytics-metrics-grid" aria-label="Key Performance Indicators">
             <StatCard
-              title="Total reports"
-              value={analytics?.totalReports ?? 0}
-              subtitle="All reports in the database"
+              title="Total Issues Logged"
+              value={analytics.totalReports}
+              subtitle="All time reports submitted"
             />
             <StatCard
-              title="Pending review"
-              value={statuses.pending ?? 0}
-              subtitle="Awaiting verification"
+              title="Successfully Resolved"
+              value={analytics.resolution?.resolvedCount || 0}
+              subtitle={`${
+                analytics.totalReports > 0
+                  ? Math.round(
+                      ((analytics.resolution?.resolvedCount || 0) /
+                        analytics.totalReports) *
+                        100
+                    )
+                  : 0
+              }% completion rate`}
             />
             <StatCard
-              title="In progress"
-              value={statuses['in-progress'] ?? 0}
-              subtitle="Work underway"
+              title="Avg. Resolution Time"
+              value={resolutionDisplay}
+              subtitle="From submission to resolution"
             />
             <StatCard
-              title="Resolved"
-              value={statuses.resolved ?? 0}
-              subtitle="Marked as resolved"
+              title="Active In Progress"
+              value={
+                (statuses.assigned || 0) + (statuses['in-progress'] || 0)
+              }
+              subtitle="Assigned or currently being fixed"
             />
           </section>
 
-          <section className="analytics-chart-grid">
+          {/* Charts Row 1: Status Distribution & Reports by Category */}
+          <div className="analytics-grid-two">
             <ChartPanel
-              title="Reports by status"
-              description="Current distribution across report workflows"
+              title="Status Distribution"
+              description="Current lifecycle stage breakdown of all community reports"
             >
-              {statusData.length === 0 ? (
-                <p className="analytics-empty">No status data available.</p>
-              ) : (
-                <div className="analytics-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={statusData}
-                        dataKey="count"
-                        nameKey="name"
-                        cx="50%"
-                        cy="45%"
-                        outerRadius={105}
-                        label={({ name, percent }) =>
-                          `${name} ${(percent * 100).toFixed(0)}%`
-                        }
-                      >
-                        {statusData.map((item) => (
-                          <Cell
-                            key={item.status}
-                            fill={STATUS_COLORS[item.status] || '#64748B'}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              <div className="analytics-chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusData}
+                      dataKey="count"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={65}
+                      outerRadius={95}
+                      paddingAngle={4}
+                    >
+                      {statusData.map((entry) => (
+                        <Cell
+                          key={entry.status}
+                          fill={STATUS_COLORS[entry.status] || '#78716C'}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid var(--color-border)',
+                        background: '#ffffff',
+                        fontSize: '13px',
+                      }}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
             </ChartPanel>
 
             <ChartPanel
-              title="Reports by category"
-              description="Which types of issues are reported most often"
+              title="Issues by Category"
+              description="Volume distribution across civic issue categories"
             >
-              {categoryData.length === 0 ? (
-                <p className="analytics-empty">No category data available.</p>
-              ) : (
-                <div className="analytics-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={categoryData}
-                      margin={{ top: 12, right: 12, left: -12, bottom: 45 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis
-                        dataKey="name"
-                        angle={-30}
-                        textAnchor="end"
-                        interval={0}
-                        tick={{ fontSize: 11 }}
-                      />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Bar
-                        dataKey="count"
-                        name="Reports"
-                        fill="#0D9488"
-                        radius={[5, 5, 0, 0]}
-                      />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              <div className="analytics-chart-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={categoryData} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0dfd2" />
+                    <XAxis type="number" stroke="var(--color-muted)" />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={90}
+                      stroke="var(--color-navy)"
+                      tick={{ fontSize: 12 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid var(--color-border)',
+                        background: '#ffffff',
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[0, 6, 6, 0]}>
+                      {categoryData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </ChartPanel>
+          </div>
 
-            <div className="analytics-wide-panel">
-              <ChartPanel
-                title="Monthly report trend"
-                description="Reports created in each of the last six calendar months"
-              >
-                <div className="analytics-chart analytics-trend-chart">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={monthlyData}
-                      margin={{ top: 12, right: 20, left: 0, bottom: 4 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="monthLabel" />
-                      <YAxis allowDecimals={false} />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="reports"
-                        name="Reports created"
-                        stroke="#0D9488"
-                        strokeWidth={3}
-                        dot={{ r: 4 }}
-                        activeDot={{ r: 6 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </ChartPanel>
+          {/* Charts Row 2: 6-Month Trends */}
+          <ChartPanel
+            title="6-Month Submission Trend"
+            description="Report volume velocity over the current and prior five months"
+          >
+            <div className="analytics-chart-container" style={{ height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={monthlyData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0dfd2" />
+                  <XAxis dataKey="name" stroke="var(--color-navy)" />
+                  <YAxis stroke="var(--color-muted)" allowDecimals={false} />
+                  <Tooltip
+                    contentStyle={{
+                      borderRadius: '12px',
+                      border: '1px solid var(--color-border)',
+                      background: '#ffffff',
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="reports"
+                    name="Reports Logged"
+                    stroke="var(--color-primary)"
+                    strokeWidth={3}
+                    dot={{ fill: 'var(--color-primary)', r: 6 }}
+                    activeDot={{ r: 8, stroke: '#fff', strokeWidth: 2 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-          </section>
-
-          <section className="analytics-panel analytics-resolution-panel">
-            <div>
-              <h2>Resolution performance</h2>
-              <p>
-                Average elapsed time from report creation to resolution,
-                for resolved reports with recorded timestamps.
-              </p>
-            </div>
-            <div className="analytics-resolution-value">
-              {resolutionHours == null
-                ? 'N/A'
-                : `${resolutionHours.toLocaleString('en-IN')} hours`}
-            </div>
-          </section>
-
-          <footer className="analytics-footer">
-            Statistics are calculated from the report records returned by the
-            analytics API.
-            {analytics?.generatedAt && (
-              <span>
-                {' '}
-                Updated {new Date(analytics.generatedAt).toLocaleString('en-IN')}
-              </span>
-            )}
-          </footer>
+          </ChartPanel>
         </>
       )}
     </main>

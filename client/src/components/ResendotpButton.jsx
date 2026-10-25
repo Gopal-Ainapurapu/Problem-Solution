@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import api from '../api';
 import toast from 'react-hot-toast';
@@ -47,12 +46,21 @@ export default function ResendOtpButton({ email, channel, purpose }) {
   };
 
   return (
-    <div className="text-center">
+    <div style={{ textAlign: 'center', marginTop: '12px' }}>
       <button
         type="button"
         onClick={resend}
         disabled={loading || secondsLeft > 0}
-        className="text-sm font-semibold text-teal-700 transition hover:text-teal-900 disabled:cursor-not-allowed disabled:text-slate-400"
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: 0,
+          color: secondsLeft > 0 || loading ? 'var(--color-muted)' : 'var(--color-primary-dark)',
+          fontSize: '13px',
+          fontWeight: 700,
+          cursor: secondsLeft > 0 || loading ? 'not-allowed' : 'pointer',
+          textDecoration: secondsLeft > 0 || loading ? 'none' : 'underline',
+        }}
       >
         {loading
           ? 'Sending code...'

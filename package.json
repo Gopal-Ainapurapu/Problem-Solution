@@ -1,0 +1,15 @@
+{
+  "name": "locallens-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "LocalLens - Community Issue Resolution Platform",
+  "type": "module",
+  "scripts": {
+    "dev": "node dev.js",
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "build": "npm --prefix client run build",
+    "lint": "npm --prefix client run lint",
+    "seed": "npm --prefix server run seed",
+    "make-admin": "npm --prefix server run make-admin --"
+  }
+}

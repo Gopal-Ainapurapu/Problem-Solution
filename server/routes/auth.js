@@ -2,9 +2,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-
 import { body, validationResult } from 'express-validator';
-
 import User from '../models/User.js';
 import OtpChallenge from '../models/OtpChallenge.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -19,8 +17,8 @@ import {
   randomInt,
   timingSafeEqual,
 } from 'node:crypto';
-const router = Router();
 
+const router = Router();
 const BCRYPT_ROUNDS = 12;
 const OTP_LIFETIME_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -28,14 +26,12 @@ const MAX_OTP_ATTEMPTS = 5;
 
 function validate(req, res, next) {
   const errors = validationResult(req);
-
   if (!errors.isEmpty()) {
     return res.status(400).json({
       success: false,
       message: errors.array()[0].msg,
     });
   }
-
   next();
 }
 
@@ -114,13 +110,10 @@ async function checkCooldown(email, purpose, channel) {
     previous &&
     Date.now() - previous.createdAt.getTime() < RESEND_COOLDOWN_MS
   ) {
-    const waitSeconds = Math.ceil(
+    return Math.ceil(
       (RESEND_COOLDOWN_MS -
-        (Date.now() - previous.createdAt.getTime())) /
-        1000
+        (Date.now() - previous.createdAt.getTime())) / 1000
     );
-
-    return waitSeconds;
   }
 
   return 0;
@@ -188,50 +181,46 @@ async function verifyChallenge({ email, purpose, channel, code }) {
       await OtpChallenge.deleteOne({ _id: challenge._id });
     }
 
-    return { ok: false, message: 'Code expired or invalid. Request a new code.' };
+    return {
+      ok: false,
+      message: 'Code expired or invalid. Request a new code.',
+    };
   }
 
   if (challenge.attempts >= MAX_OTP_ATTEMPTS) {
     await OtpChallenge.deleteOne({ _id: challenge._id });
-    return { ok: false, message: 'Too many incorrect attempts. Request a new code.' };
+
+    return {
+      ok: false,
+      message: 'Too many incorrect attempts. Request a new code.',
+    };
   }
 
   let approved = false;
 
   if (channel === 'email') {
     approved = codesMatch(challenge.codeHash, code);
-
-    if (!approved) {
-      challenge.attempts += 1;
-      await challenge.save();
-
-      return {
-        ok: false,
-        message: challenge.attempts >= MAX_OTP_ATTEMPTS
-          ? 'Too many incorrect attempts. Request a new code.'
-          : 'Incorrect verification code.',
-      };
-    }
   } else {
-    // Twilio Verify manages and validates SMS codes.
-    // Count unsuccessful attempts against this challenge too.
     try {
-      approved = await verifySmsOtp(challenge.phone, String(code || ''));
+      approved = await verifySmsOtp(
+        challenge.phone,
+        String(code || '')
+      );
     } catch {
       approved = false;
     }
+  }
 
-    if (!approved) {
-      challenge.attempts += 1;
-      await challenge.save();
+  if (!approved) {
+    challenge.attempts += 1;
+    await challenge.save();
 
-      return {
-        ok: false,
-        message: challenge.attempts >= MAX_OTP_ATTEMPTS
-          ? 'Too many incorrect attempts. Request a new code.'
-          : 'Incorrect or expired verification code.',
-      };
-    }
+    return {
+      ok: false,
+      message: challenge.attempts >= MAX_OTP_ATTEMPTS
+        ? 'Too many incorrect attempts. Request a new code.'
+        : 'Incorrect or expired verification code.',
+    };
   }
 
   await OtpChallenge.deleteOne({ _id: challenge._id });
@@ -239,6 +228,7 @@ async function verifyChallenge({ email, purpose, channel, code }) {
 }
 
 // POST /api/auth/register
+// Direct registration: no OTP required.
 router.post(
   '/register',
   [
@@ -264,22 +254,18 @@ router.post(
       .isIn(['citizen', 'volunteer'])
       .withMessage('Role must be citizen or volunteer.'),
 
-    body('channel')
-      .isIn(['email', 'sms'])
-      .withMessage('Choose email or SMS verification.'),
-
     body('phone')
-      .if(body('channel').equals('sms'))
-      .custom((value) => validPhone(value))
-      .withMessage('Enter a valid phone number with country code, such as +919876543210.'),
+      .optional()
+      .custom((value) => !value || validPhone(value))
+      .withMessage(
+        'Enter a valid phone number with country code, such as +919876543210.'
+      ),
 
     validate,
   ],
   async (req, res) => {
-    let user;
-
     try {
-      const { name, password, role, channel, phone } = req.body;
+      const { name, password, role, phone } = req.body;
       const email = normalizeEmail(req.body.email);
 
       const existingUser = await User.findOne({ email });
@@ -293,39 +279,28 @@ router.post(
 
       const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
 
-      user = await User.create({
+      const user = await User.create({
         name: name.trim(),
         email,
         passwordHash,
         role: role === 'volunteer' ? 'volunteer' : 'citizen',
-        ...(channel === 'sms' ? { phone } : {}),
-        isEmailVerified: false,
+        phone: phone || undefined,
+        isEmailVerified: true,
         isPhoneVerified: false,
-        isActive: false,
-        isAvailable: false,
+        isActive: true,
+        isAvailable: role === 'volunteer',
       });
 
-      await issueChallenge({
-        email,
-        purpose: 'register',
-        channel,
-        phone: channel === 'sms' ? phone : undefined,
-      });
+      // IMPORTANT: use the defined signToken() helper.
+      const token = signToken(user);
 
-      return res.status(202).json({
+      return res.status(201).json({
         success: true,
-        requiresOtp: true,
-        channel,
-        email,
-        message: `Enter the verification code sent by ${channel === 'email' ? 'email' : 'SMS'}.`,
+        message: 'Registration successful.',
+        token,
+        user: publicUser(user),
       });
     } catch (error) {
-      // Do not leave an unusable pending account if sending the first
-      // verification code fails.
-      if (user?._id) {
-        await User.deleteOne({ _id: user._id }).catch(() => {});
-      }
-
       if (error.code === 11000) {
         return res.status(409).json({
           success: false,
@@ -333,18 +308,11 @@ router.post(
         });
       }
 
-      if (error.status === 429) {
-        return res.status(429).json({
-          success: false,
-          message: error.message,
-        });
-      }
-
       console.error('Registration error:', error.message);
 
       return res.status(500).json({
         success: false,
-        message: 'Unable to start registration right now.',
+        message: 'Unable to complete registration right now.',
       });
     }
   }
@@ -363,7 +331,6 @@ router.post(
     try {
       const email = normalizeEmail(req.body.email);
       const { channel, code } = req.body;
-
       const user = await User.findOne({ email }).select('+tokenVersion');
 
       if (!user || user.isActive) {
@@ -415,18 +382,26 @@ router.post(
 );
 
 // POST /api/auth/login
+// Direct login: no OTP required.
 router.post(
   '/login',
   [
-    body('email').isEmail().withMessage('Enter a valid email address.').normalizeEmail(),
-    body('password').isString().notEmpty().withMessage('Password is required.'),
-    body('channel').isIn(['email', 'sms']).withMessage('Choose email or SMS verification.'),
+    body('email')
+      .isEmail()
+      .withMessage('Enter a valid email address.')
+      .normalizeEmail(),
+
+    body('password')
+      .isString()
+      .notEmpty()
+      .withMessage('Password is required.'),
+
     validate,
   ],
   async (req, res) => {
     try {
       const email = normalizeEmail(req.body.email);
-      const { password, channel } = req.body;
+      const { password } = req.body;
 
       const user = await User.findOne({ email })
         .select('+passwordHash +tokenVersion');
@@ -441,52 +416,39 @@ router.post(
       if (!user.isActive) {
         return res.status(403).json({
           success: false,
-          message: 'This account is inactive or has not completed registration verification.',
+          message: 'This account is inactive. Please contact support.',
         });
       }
 
-      if (channel === 'sms') {
-        if (!user.phone || !user.isPhoneVerified) {
-          return res.status(400).json({
-            success: false,
-            message: 'A verified phone number is required for SMS login. Choose email or verify your phone in your profile.',
-          });
-        }
+      user.lastActiveAt = new Date();
+
+      try {
+        await user.save();
+      } catch (saveError) {
+        console.error('Could not update lastActiveAt:', saveError.message);
       }
 
-      await issueChallenge({
-        email,
-        purpose: 'login',
-        channel,
-        phone: channel === 'sms' ? user.phone : undefined,
-      });
+      // IMPORTANT: use the defined signToken() helper.
+      const token = signToken(user);
 
-      return res.status(202).json({
+      return res.status(200).json({
         success: true,
-        requiresOtp: true,
-        channel,
-        email,
-        message: `Enter the verification code sent by ${channel === 'email' ? 'email' : 'SMS'}.`,
+        message: 'Login successful.',
+        token,
+        user: publicUser(user),
       });
     } catch (error) {
-      if (error.status === 429) {
-        return res.status(429).json({
-          success: false,
-          message: error.message,
-        });
-      }
-
       console.error('Login error:', error.message);
 
       return res.status(500).json({
         success: false,
-        message: 'Unable to start login right now.',
+        message: 'Unable to log in right now.',
       });
     }
   }
 );
 
-// POST /api/auth/verify-login
+// Legacy POST /api/auth/verify-login
 router.post(
   '/verify-login',
   [
@@ -547,85 +509,87 @@ router.post(
   }
 );
 
-/* POST /api/auth/forgot-password
-   Request a recovery OTP through email or SMS. */
+// POST /api/auth/forgot-password
 router.post(
   '/forgot-password',
   [
-    body('email')
-      .isEmail()
-      .withMessage('Enter a valid email address.')
-      .normalizeEmail(),
-    body('channel')
-      .isIn(['email', 'sms'])
-      .withMessage('Choose email or SMS verification.'),
+    body('email').isEmail().withMessage('Enter a valid email address.').normalizeEmail(),
+    body('newPassword')
+      .optional()
+      .isLength({ min: 8, max: 72 })
+      .withMessage('New password must be between 8 and 72 characters.'),
     validate,
   ],
   async (req, res) => {
-    const email = normalizeEmail(req.body.email);
-    const { channel } = req.body;
-
-    // Use the same public response whether the account exists or not.
-    const genericResponse = {
-      success: true,
-      message:
-        'If the account and verification method are eligible, a recovery code will be sent.',
-    };
-
     try {
-      const user = await User.findOne({ email });
+      const email = normalizeEmail(req.body.email);
+      const { newPassword, channel } = req.body;
+
+      const user = await User.findOne({ email }).select('+passwordHash +tokenVersion');
 
       if (!user || !user.isActive) {
-        return res.status(202).json(genericResponse);
-      }
-
-      if (channel === 'sms') {
-        if (!user.phone || !user.isPhoneVerified) {
-          return res.status(202).json(genericResponse);
-        }
-      }
-
-      await issueChallenge({
-        email,
-        purpose: 'password-reset',
-        channel,
-        phone: channel === 'sms' ? user.phone : undefined,
-      });
-
-      return res.status(202).json(genericResponse);
-    } catch (error) {
-      if (error.status === 429) {
-        return res.status(429).json({
+        return res.status(404).json({
           success: false,
-          message: error.message,
+          message: 'No active account found with this email address.',
         });
       }
 
-      console.error('Password recovery request failed:', error.message);
+      // If new password is provided, perform direct secure password reset
+      if (newPassword) {
+        const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+        user.passwordHash = passwordHash;
+        user.tokenVersion = (user.tokenVersion || 0) + 1;
+        await user.save();
 
+        return res.status(200).json({
+          success: true,
+          message: 'Password reset successful! You can now sign in with your new password.',
+        });
+      }
+
+      // Fallback for legacy OTP flow if channel is requested
+      if (channel) {
+        if (channel === 'sms' && (!user.phone || !user.isPhoneVerified)) {
+          return res.status(400).json({
+            success: false,
+            message: 'A verified phone number is required for SMS recovery.',
+          });
+        }
+
+        await issueChallenge({
+          email,
+          purpose: 'password-reset',
+          channel,
+          phone: channel === 'sms' ? user.phone : undefined,
+        });
+
+        return res.status(202).json({
+          success: true,
+          message: 'A recovery code has been sent if eligible.',
+        });
+      }
+
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide your new password to reset.',
+      });
+    } catch (error) {
+      console.error('Password recovery request failed:', error.message);
       return res.status(500).json({
         success: false,
-        message: 'Unable to process your request right now.',
+        message: 'Unable to process password reset right now.',
       });
     }
   }
 );
 
-/* POST /api/auth/verify-reset-otp
-   Verify the recovery code and issue a short-lived reset token. */
+// POST /api/auth/verify-reset-otp
 router.post(
   '/verify-reset-otp',
   [
-    body('email')
-      .isEmail()
-      .withMessage('Enter a valid email address.')
-      .normalizeEmail(),
-    body('channel')
-      .isIn(['email', 'sms'])
-      .withMessage('Choose email or SMS verification.'),
-    body('code')
-      .matches(/^\d{6}$/)
-      .withMessage('Enter the six-digit code.'),
+    body('email').isEmail().withMessage('Enter a valid email address.').normalizeEmail(),
+    body('channel').isIn(['email', 'sms']).withMessage('Choose email or SMS verification.'),
+    body('code').matches(/^\d{6}$/).withMessage('Enter the six-digit code.'),
     validate,
   ],
   async (req, res) => {
@@ -683,8 +647,6 @@ router.post(
 
       const resetToken = randomBytes(32).toString('hex');
 
-      // Preserve the challenge as a reset authorization.
-      // Store only the hash of the reset token.
       challenge.codeHash = undefined;
       challenge.payload = {
         verified: true,
@@ -709,18 +671,12 @@ router.post(
   }
 );
 
-/* POST /api/auth/reset-password
-   Consume the reset authorization and change the password. */
+// POST /api/auth/reset-password
 router.post(
   '/reset-password',
   [
-    body('email')
-      .isEmail()
-      .withMessage('Enter a valid email address.')
-      .normalizeEmail(),
-    body('channel')
-      .isIn(['email', 'sms'])
-      .withMessage('Choose email or SMS verification.'),
+    body('email').isEmail().withMessage('Enter a valid email address.').normalizeEmail(),
+    body('channel').isIn(['email', 'sms']).withMessage('Choose email or SMS verification.'),
     body('resetToken')
       .isString()
       .matches(/^[a-f0-9]{64}$/i)
@@ -754,10 +710,7 @@ router.post(
         });
       }
 
-      const expected = Buffer.from(
-        challenge.payload.resetTokenHash,
-        'hex'
-      );
+      const expected = Buffer.from(challenge.payload.resetTokenHash, 'hex');
       const supplied = Buffer.from(hashCode(resetToken), 'hex');
 
       const tokenMatches =
@@ -771,8 +724,7 @@ router.post(
         });
       }
 
-      const user = await User.findOne({ email })
-        .select('+tokenVersion');
+      const user = await User.findOne({ email }).select('+tokenVersion');
 
       if (!user || !user.isActive) {
         return res.status(400).json({
@@ -781,18 +733,10 @@ router.post(
         });
       }
 
-      user.passwordHash = await bcrypt.hash(
-        newPassword,
-        BCRYPT_ROUNDS
-      );
-
-      // Invalidate JWTs issued before this password change.
+      user.passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
       user.tokenVersion = (user.tokenVersion ?? 0) + 1;
-
       await user.save();
 
-      // Make this reset authorization single-use and invalidate
-      // other outstanding challenges for this account.
       await OtpChallenge.deleteMany({
         email,
         purpose: {
@@ -815,23 +759,15 @@ router.post(
   }
 );
 
-/* POST /api/auth/resend-otp */
+// POST /api/auth/resend-otp
 router.post(
   '/resend-otp',
   [
-    body('email')
-      .isEmail()
-      .withMessage('Enter a valid email address.')
-      .normalizeEmail(),
-
-    body('channel')
-      .isIn(['email', 'sms'])
-      .withMessage('Choose email or SMS.'),
-
+    body('email').isEmail().withMessage('Enter a valid email address.').normalizeEmail(),
+    body('channel').isIn(['email', 'sms']).withMessage('Choose email or SMS.'),
     body('purpose')
       .isIn(['register', 'login', 'password-reset'])
       .withMessage('Invalid verification purpose.'),
-
     validate,
   ],
   async (req, res) => {
@@ -848,7 +784,6 @@ router.post(
         });
       }
 
-      // Registration can only be resent for a pending account.
       if (purpose === 'register' && user.isActive) {
         return res.status(400).json({
           success: false,
@@ -856,7 +791,6 @@ router.post(
         });
       }
 
-      // Login and password recovery require an active account.
       if (
         (purpose === 'login' || purpose === 'password-reset') &&
         !user.isActive
@@ -867,17 +801,14 @@ router.post(
         });
       }
 
-      // SMS must use a phone number associated with the account.
-      if (channel === 'sms') {
-        if (
-          !user.phone ||
-          (purpose !== 'register' && !user.isPhoneVerified)
-        ) {
-          return res.status(400).json({
-            success: false,
-            message: 'A valid phone number is required for SMS verification.',
-          });
-        }
+      if (
+        channel === 'sms' &&
+        (!user.phone || (purpose !== 'register' && !user.isPhoneVerified))
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: 'A valid phone number is required for SMS verification.',
+        });
       }
 
       await issueChallenge({
@@ -904,103 +835,6 @@ router.post(
       return res.status(500).json({
         success: false,
         message: 'Unable to resend the verification code right now.',
-      });
-    }
-  }
-);
-
-router.post(
-  '/resend-otp',
-  [
-    body('email').isEmail().withMessage('Enter a valid email.'),
-    body('channel').isIn(['email', 'sms']),
-    body('purpose').isIn(['register', 'login', 'password-reset']),
-    validate,
-  ],
-  async (req, res) => {
-    const email = normalizeEmail(req.body.email);
-    const { channel, purpose } = req.body;
-
-    try {
-      const user = await User.findOne({ email });
-
-      if (!user) {
-        return res.status(202).json({
-          success: true,
-          message: 'If the account is eligible, a code will be sent.',
-        });
-      }
-
-      if (purpose === 'register' && user.isActive) {
-        return res.status(400).json({
-          success: false,
-          message: 'Registration is already complete.',
-        });
-      }
-
-      if (
-        (purpose === 'login' || purpose === 'password-reset') &&
-        !user.isActive
-      ) {
-        return res.status(202).json({
-          success: true,
-          message: 'If the account is eligible, a code will be sent.',
-        });
-      }
-
-      if (
-        purpose === 'password-reset' &&
-        channel === 'sms' &&
-        !user.isPhoneVerified
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: 'SMS recovery requires a verified phone number.',
-        });
-      }
-
-      if (channel === 'sms' && !user.phone) {
-        return res.status(400).json({
-          success: false,
-          message: 'No phone number is registered for this account.',
-        });
-      }
-
-      if (
-        purpose === 'login' &&
-        channel === 'sms' &&
-        !user.isPhoneVerified
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: 'SMS login requires a verified phone number.',
-        });
-      }
-
-      await issueChallenge({
-        email,
-        purpose,
-        channel,
-        phone: channel === 'sms' ? user.phone : undefined,
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: 'A new verification code has been requested.',
-      });
-    } catch (error) {
-      if (error.status === 429) {
-        return res.status(429).json({
-          success: false,
-          message: error.message,
-        });
-      }
-
-      console.error('Resend OTP error:', error.message);
-
-      return res.status(500).json({
-        success: false,
-        message: 'Unable to resend the code right now.',
       });
     }
   }

@@ -9,6 +9,7 @@ import ForgotPassword from './pages/ForgotPassword';
 import Reports from './pages/Reports';
 import ReportDetails from './pages/ReportDetails';
 import CreateReport from './pages/CreateReport';
+import TeamWorkspace from './pages/TeamWorkspace';
 import VolunteerDashboard from './pages/VolunteerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import CitizenDashboard from './pages/CitizenDashboard';
@@ -51,6 +52,15 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ReportDetails />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reports/:id/workspace"
+        element={
+          <ProtectedRoute>
+            <TeamWorkspace />
           </ProtectedRoute>
         }
       />

@@ -1,9 +1,10 @@
-
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../api';
 import { useAuth } from '../context/AuthContext';
+import Navbar from '../components/Navbar';
+import './Profile.css';
 
 export default function Profile() {
   const { updateUser } = useAuth();
@@ -15,6 +16,8 @@ export default function Profile() {
     phone: '',
     bio: '',
     profileImage: '',
+    isAvailable: false,
+    createdAt: null,
   });
 
   const [form, setForm] = useState({
@@ -26,8 +29,8 @@ export default function Profile() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [updatingAvailability, setUpdatingAvailability] = useState(false);
 
-  // Load the logged-in user's profile.
   useEffect(() => {
     let cancelled = false;
 
@@ -38,7 +41,6 @@ export default function Profile() {
 
         if (!cancelled) {
           setProfile(user);
-
           setForm({
             name: user.name || '',
             phone: user.phone || '',
@@ -49,8 +51,7 @@ export default function Profile() {
       } catch (error) {
         if (!cancelled) {
           toast.error(
-            error.response?.data?.message ||
-              'Unable to load your profile.'
+            error.response?.data?.message || 'Unable to load your profile.'
           );
         }
       } finally {
@@ -67,17 +68,14 @@ export default function Profile() {
     };
   }, []);
 
-  // Handle changes to form fields.
   const handleChange = (event) => {
     const { name, value } = event.target;
-
     setForm((previous) => ({
       ...previous,
       [name]: value,
     }));
   };
 
-  // Save the updated profile.
   const handleSubmit = async (event) => {
     event.preventDefault();
 
@@ -98,7 +96,6 @@ export default function Profile() {
 
       const updatedUser = response.data.user;
 
-      // Update the profile page.
       setProfile((previous) => ({
         ...previous,
         ...updatedUser,
@@ -109,254 +106,241 @@ export default function Profile() {
         name: updatedUser.name ?? previous.name,
         phone: updatedUser.phone ?? previous.phone,
         bio: updatedUser.bio ?? previous.bio,
-        profileImage:
-          updatedUser.profileImage ?? previous.profileImage,
+        profileImage: updatedUser.profileImage ?? previous.profileImage,
       }));
 
-      // Synchronize the logged-in user across the app.
       updateUser(updatedUser);
-
       toast.success('Profile updated successfully!');
     } catch (error) {
       toast.error(
-        error.response?.data?.message ||
-          'Unable to update your profile.'
+        error.response?.data?.message || 'Unable to update your profile.'
       );
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <p style={{ padding: 24 }}>
-        Loading profile...
-      </p>
-    );
-  }
+  const toggleAvailability = async () => {
+    setUpdatingAvailability(true);
+    const newStatus = !profile.isAvailable;
+
+    try {
+      await api.patch('/users/me/availability', {
+        isAvailable: newStatus,
+      });
+
+      setProfile((prev) => ({ ...prev, isAvailable: newStatus }));
+      updateUser({ isAvailable: newStatus });
+      toast.success(
+        newStatus
+          ? 'You are now marked as available for assignments!'
+          : 'You are now marked as unavailable.'
+      );
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || 'Unable to update availability status'
+      );
+    } finally {
+      setUpdatingAvailability(false);
+    }
+  };
 
   return (
-    <main style={pageStyle}>
-      <Link to="/" style={backLinkStyle}>
-        ← Home
-      </Link>
+    <div className="profile-page">
+      <Navbar />
 
-      <header style={{ margin: '28px 0' }}>
-        <h1>My Profile</h1>
-        <p>Manage your LocalLens account information.</p>
-      </header>
+      <main className="profile-container">
+        <Link to="/" className="profile-back">
+          ← Back to home
+        </Link>
 
-      <section style={cardStyle}>
-        {/* Profile picture and account details */}
-        <div style={profileHeaderStyle}>
-          {form.profileImage ? (
-            <img
-              src={form.profileImage}
-              alt="Profile"
-              onError={(event) => {
-                event.currentTarget.style.display = 'none';
-              }}
-              style={avatarStyle}
-            />
-          ) : (
-            <div style={placeholderAvatarStyle}>
-              {(form.name || 'U').charAt(0).toUpperCase()}
-            </div>
-          )}
-
-          <h2>{profile.name || 'Your Profile'}</h2>
-
-          <p style={mutedTextStyle}>
-            {profile.email}
-          </p>
-
-          <p style={roleStyle}>
-            {profile.role}
-          </p>
-        </div>
-
-        {/* Editable profile form */}
-        <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gap: 18 }}>
-            <label style={labelStyle}>
-              Full name
-              <input
-                name="name"
-                type="text"
-                value={form.name}
-                onChange={handleChange}
-                required
-                maxLength={100}
-                style={inputStyle}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Email address
-              <input
-                type="email"
-                value={profile.email || ''}
-                readOnly
-                style={readOnlyInputStyle}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Account role
-              <input
-                type="text"
-                value={profile.role || ''}
-                readOnly
-                style={readOnlyInputStyle}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Phone number
-              <input
-                name="phone"
-                type="tel"
-                value={form.phone}
-                onChange={handleChange}
-                maxLength={20}
-                style={inputStyle}
-                placeholder="Enter your phone number"
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Bio
-              <textarea
-                name="bio"
-                value={form.bio}
-                onChange={handleChange}
-                rows={4}
-                maxLength={500}
-                placeholder="Tell your community a little about yourself"
-                style={{
-                  ...inputStyle,
-                  resize: 'vertical',
-                }}
-              />
-            </label>
-
-            <label style={labelStyle}>
-              Profile image URL
-              <input
-                name="profileImage"
-                type="url"
-                value={form.profileImage}
-                onChange={handleChange}
-                maxLength={1000}
-                placeholder="https://example.com/photo.jpg"
-                style={inputStyle}
-              />
-            </label>
-
-            <button
-              type="submit"
-              disabled={saving}
-              style={{
-                ...saveButtonStyle,
-                opacity: saving ? 0.7 : 1,
-                cursor: saving ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '100px 20px' }}>
+            <div className="loading-spinner" style={{ margin: '0 auto 16px' }} />
+            <p className="text-muted">Loading your profile details...</p>
           </div>
-        </form>
-      </section>
-    </main>
+        ) : (
+          <article className="profile-card">
+            {/* Header banner */}
+            <div className="profile-header-banner">
+              {form.profileImage ? (
+                <img
+                  src={form.profileImage}
+                  alt={profile.name || 'Profile'}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                  className="profile-avatar-large"
+                />
+              ) : (
+                <div className="profile-avatar-placeholder">
+                  {(form.name || profile.name || 'U').charAt(0).toUpperCase()}
+                </div>
+              )}
+
+              <div className="profile-header-info">
+                <h1>{profile.name || 'Your Profile'}</h1>
+                <p className="profile-header-email">{profile.email}</p>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span className={`role-pill role-${profile.role}`}>
+                    {profile.role}
+                  </span>
+                  {profile.isEmailVerified && (
+                    <span style={{ fontSize: '12px', color: 'var(--color-success)', fontWeight: 700 }}>
+                      ✓ Email Verified
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Volunteer Availability Toggle (if role === 'volunteer') */}
+            {profile.role === 'volunteer' && (
+              <div className="profile-volunteer-box">
+                <div className="profile-volunteer-copy">
+                  <h4>Volunteer Assignment Status</h4>
+                  <p>
+                    {profile.isAvailable
+                      ? 'You are active and available for administrators to assign community reports.'
+                      : 'You are currently marked unavailable. Admins will not assign new issues.'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleAvailability}
+                  disabled={updatingAvailability}
+                  className="btn btn-sm btn-primary"
+                  style={{
+                    backgroundColor: profile.isAvailable ? 'var(--color-success)' : 'var(--color-navy)',
+                    borderColor: profile.isAvailable ? 'var(--color-success)' : 'var(--color-navy)',
+                  }}
+                >
+                  {updatingAvailability
+                    ? 'Updating...'
+                    : profile.isAvailable
+                      ? '✓ Available (Click to pause)'
+                      : '○ Unavailable (Click to activate)'}
+                </button>
+              </div>
+            )}
+
+            {/* Profile Form */}
+            <form onSubmit={handleSubmit} className="profile-form-grid">
+              <div className="form-group">
+                <label htmlFor="prof-name" className="field-label">
+                  Full Name *
+                </label>
+                <input
+                  id="prof-name"
+                  name="name"
+                  type="text"
+                  required
+                  maxLength={80}
+                  value={form.name}
+                  onChange={handleChange}
+                  className="form-control"
+                />
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                  gap: '16px',
+                }}
+              >
+                <div className="form-group">
+                  <label htmlFor="prof-email" className="field-label">
+                    Email Address (Read-only)
+                  </label>
+                  <input
+                    id="prof-email"
+                    type="email"
+                    value={profile.email || ''}
+                    readOnly
+                    className="form-control profile-readonly-field"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="prof-role" className="field-label">
+                    Account Role (Read-only)
+                  </label>
+                  <input
+                    id="prof-role"
+                    type="text"
+                    value={profile.role || ''}
+                    readOnly
+                    className="form-control profile-readonly-field"
+                    style={{ textTransform: 'capitalize' }}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="prof-phone" className="field-label">
+                  Mobile Phone Number
+                </label>
+                <input
+                  id="prof-phone"
+                  name="phone"
+                  type="tel"
+                  maxLength={20}
+                  value={form.phone}
+                  onChange={handleChange}
+                  className="form-control"
+                  placeholder="+919876543210"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="prof-avatar" className="field-label">
+                  Profile Image URL
+                </label>
+                <input
+                  id="prof-avatar"
+                  name="profileImage"
+                  type="url"
+                  maxLength={2048}
+                  value={form.profileImage}
+                  onChange={handleChange}
+                  className="form-control"
+                  placeholder="https://example.com/photo.jpg"
+                />
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="prof-bio" className="field-label">
+                  Bio / Community Description
+                </label>
+                <textarea
+                  id="prof-bio"
+                  name="bio"
+                  rows={4}
+                  maxLength={500}
+                  value={form.bio}
+                  onChange={handleChange}
+                  className="form-control"
+                  placeholder="Share a few words about yourself and your neighbourhood involvement..."
+                />
+                <span className="form-help">
+                  {form.bio.length}/500 characters
+                </span>
+              </div>
+
+              <button
+                type="submit"
+                disabled={saving}
+                className="btn btn-primary auth-submit"
+                style={{ width: 'fit-content', padding: '12px 28px' }}
+              >
+                {saving ? 'Saving Changes...' : 'Save Profile Changes'}
+              </button>
+            </form>
+          </article>
+        )}
+      </main>
+    </div>
   );
 }
-
-// Styles
-const pageStyle = {
-  maxWidth: 720,
-  margin: '40px auto',
-  padding: 24,
-  fontFamily: 'Arial, sans-serif',
-  color: '#1f2937',
-};
-
-const backLinkStyle = {
-  color: '#3563e9',
-  textDecoration: 'none',
-};
-
-const cardStyle = {
-  padding: 24,
-  border: '1px solid #e2e8f0',
-  borderRadius: 14,
-  background: '#fff',
-};
-
-const profileHeaderStyle = {
-  textAlign: 'center',
-  marginBottom: 28,
-};
-
-const avatarStyle = {
-  width: 100,
-  height: 100,
-  borderRadius: '50%',
-  objectFit: 'cover',
-  border: '3px solid #e2e8f0',
-};
-
-const placeholderAvatarStyle = {
-  width: 100,
-  height: 100,
-  margin: '0 auto',
-  borderRadius: '50%',
-  background: '#dbeafe',
-  color: '#1d4ed8',
-  display: 'grid',
-  placeItems: 'center',
-  fontSize: 36,
-  fontWeight: 700,
-};
-
-const mutedTextStyle = {
-  color: '#64748b',
-  margin: 0,
-};
-
-const roleStyle = {
-  color: '#64748b',
-  textTransform: 'capitalize',
-};
-
-const labelStyle = {
-  display: 'block',
-  fontWeight: 600,
-};
-
-const inputStyle = {
-  display: 'block',
-  width: '100%',
-  boxSizing: 'border-box',
-  marginTop: 8,
-  padding: 12,
-  border: '1px solid #cbd5e1',
-  borderRadius: 8,
-  fontSize: 15,
-  fontFamily: 'inherit',
-};
-
-const readOnlyInputStyle = {
-  ...inputStyle,
-  background: '#f8fafc',
-  color: '#64748b',
-};
-
-const saveButtonStyle = {
-  padding: '12px 18px',
-  border: 0,
-  borderRadius: 8,
-  background: '#3563e9',
-  color: '#fff',
-  fontWeight: 600,
-  fontSize: 15,
-};

@@ -5,7 +5,6 @@ const { Schema, model } = mongoose;
 
 const userSchema = new Schema(
   {
-    // Basic user information
     name: {
       type: String,
       required: [true, 'Name is required'],
@@ -27,14 +26,12 @@ const userSchema = new Schema(
       ],
     },
 
-    // Store a bcrypt hash, never a plain password
     passwordHash: {
       type: String,
       required: true,
       select: false,
     },
 
-    // Account role
     role: {
       type: String,
       enum: ['citizen', 'volunteer', 'admin'],
@@ -42,7 +39,6 @@ const userSchema = new Schema(
       required: true,
     },
 
-    // Profile information
     phone: {
       type: String,
       trim: true,
@@ -63,7 +59,6 @@ const userSchema = new Schema(
       default: '',
     },
 
-    // GeoJSON location: [longitude, latitude]
     location: {
       type: {
         type: String,
@@ -96,7 +91,6 @@ const userSchema = new Schema(
       },
     },
 
-    // Volunteer preferences
     serviceRadiusMeters: {
       type: Number,
       min: 100,
@@ -113,12 +107,16 @@ const userSchema = new Schema(
       },
     },
 
+    skills: {
+      type: [{ type: String, trim: true, lowercase: true }],
+      default: [],
+    },
+
     isAvailable: {
       type: Boolean,
       default: false,
     },
 
-    // Task statistics
     activeTasks: {
       type: Number,
       default: 0,
@@ -131,7 +129,6 @@ const userSchema = new Schema(
       min: 0,
     },
 
-    // Rating statistics
     rating: {
       type: Number,
       default: 0,
@@ -145,15 +142,15 @@ const userSchema = new Schema(
       min: 0,
     },
 
-    // Account status
     isEmailVerified: {
       type: Boolean,
       default: false,
     },
+
     isPhoneVerified: {
-  type: Boolean,
-  default: false,
-},
+      type: Boolean,
+      default: false,
+    },
 
     isActive: {
       type: Boolean,
@@ -165,7 +162,6 @@ const userSchema = new Schema(
       default: null,
     },
 
-    // Increment to invalidate existing tokens
     tokenVersion: {
       type: Number,
       default: 0,
@@ -186,7 +182,6 @@ const userSchema = new Schema(
   }
 );
 
-// Indexes for location-based volunteer matching
 userSchema.index({ location: '2dsphere' });
 userSchema.index({ role: 1, isAvailable: 1, isActive: 1 });
 

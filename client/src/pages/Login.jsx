@@ -1,205 +1,141 @@
-
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useAuth } from '../context/AuthContext';
-import ResendOtpButton from '../components/ResendOtpButton';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, verifyLogin } = useAuth();
+  const { login } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [channel, setChannel] = useState('email');
-  const [code, setCode] = useState('');
-  const [otpStep, setOtpStep] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const handleLogin = async (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    setLoading(true);
+    setErrorMsg('');
 
-    try {
-      const response = await login(email.trim(), password, channel);
-
-      if (response?.requiresOtp) {
-        setOtpStep(true);
-        toast.success('Verification code requested.');
-      } else {
-        toast.error('Unexpected login response. Please try again.');
-      }
-    } catch (error) {
-      toast.error(
-        error.response?.data?.message || 'Unable to log in.'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerify = async (event) => {
-    event.preventDefault();
-
-    if (!/^\d{6}$/.test(code.trim())) {
-      toast.error('Enter the 6-digit verification code.');
+    if (!email.trim() || !password) {
+      setErrorMsg('Please enter both your email address and password.');
       return;
     }
 
     setLoading(true);
 
     try {
-      await verifyLogin(email.trim(), code.trim(), channel);
-      toast.success('Login successful.');
-      navigate('/');
+      const response = await login(email.trim(), password);
+
+      toast.success('Welcome back!');
+
+      const userRole = response?.user?.role;
+      if (userRole === 'admin') {
+        navigate('/admin');
+      } else if (userRole === 'volunteer') {
+        navigate('/volunteer');
+      } else {
+        navigate('/citizen');
+      }
     } catch (error) {
-      toast.error(
-        error.response?.data?.message || 'Verification failed.'
-      );
+      const message =
+        error.response?.data?.message ||
+        'Invalid email or password. Please try again.';
+      setErrorMsg(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
-      <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-slate-900">
-            LocalLens
-          </h1>
-          <p className="mt-2 text-sm text-slate-500">
-            {otpStep
-              ? 'Verify your identity to continue'
-              : 'Sign in to your account'}
+    <main className="auth-page">
+      <section className="auth-card" aria-label="Sign in to LocalLens">
+        <header className="auth-header">
+          <div className="auth-brand-badge">
+            <span aria-hidden="true">◎</span> LocalLens Civic Platform
+          </div>
+          <h1>Welcome Back</h1>
+          <p>
+            Sign in to access your civic workspace, manage tasks, and track community reports.
           </p>
-        </div>
+        </header>
 
-        {!otpStep ? (
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Email address
-              </label>
-              <input
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                placeholder="you@example.com"
-              />
-            </div>
+        {errorMsg && (
+          <div className="alert alert-error" role="alert">
+            <span aria-hidden="true">⚠️</span>
+            <span>{errorMsg}</span>
+          </div>
+        )}
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
-                placeholder="Enter your password"
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="auth-form" noValidate>
+          <div className="form-group">
+            <label htmlFor="login-email">Email Address</label>
+            <input
+              id="login-email"
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              disabled={loading}
+              className="form-control"
+            />
+          </div>
 
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Receive verification code by
-              </label>
-              <select
-                value={channel}
-                onChange={(event) => setChannel(event.target.value)}
-                className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 outline-none focus:border-teal-600"
-              >
-                <option value="email">Email</option>
-                <option value="sms">SMS</option>
-              </select>
-            </div>
-
-            <div className="text-right">
+          <div className="form-group">
+            <div className="flex-between">
+              <label htmlFor="login-password">Password</label>
               <Link
                 to="/forgot-password"
-                className="text-sm font-semibold text-teal-700 hover:underline"
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: 'var(--color-primary)',
+                }}
               >
                 Forgot password?
               </Link>
             </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-teal-700 px-4 py-3 font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
-            >
-              {loading ? 'Please wait...' : 'Continue'}
-            </button>
-          </form>
-        ) : (
-          <form onSubmit={handleVerify} className="space-y-5">
-            <p className="text-sm text-slate-600">
-              Enter the 6-digit code sent through{' '}
-              <strong>{channel === 'email' ? 'email' : 'SMS'}</strong>.
-            </p>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Verification code
-              </label>
+            <div className="input-password-wrapper">
               <input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
                 required
-                value={code}
-                onChange={(event) =>
-                  setCode(event.target.value.replace(/\D/g, '').slice(0, 6))
-                }
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-center text-xl tracking-[0.4em] outline-none focus:border-teal-600"
-                placeholder="000000"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                disabled={loading}
+                className="form-control"
+                style={{ paddingRight: '70px' }}
               />
+              <button
+                type="button"
+                className="password-toggle-btn"
+                onClick={() => setShowPassword((prev) => !prev)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? 'Hide' : 'Show'}
+              </button>
             </div>
+          </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-teal-700 px-4 py-3 font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
-            >
-              {loading ? 'Verifying...' : 'Verify and log in'}
-            </button>
-
-            <ResendOtpButton
-              email={email}
-              channel={channel}
-              purpose="login"
-            />
-
-            <button
-              type="button"
-              onClick={() => {
-                setOtpStep(false);
-                setCode('');
-              }}
-              className="w-full text-sm text-slate-500 hover:text-slate-800"
-            >
-              Back to login
-            </button>
-          </form>
-        )}
-
-        <p className="mt-6 text-center text-sm text-slate-600">
-          Don't have an account?{' '}
-          <Link
-            to="/register"
-            className="font-semibold text-teal-700 hover:underline"
+          <button
+            type="submit"
+            disabled={loading}
+            className="auth-submit btn-primary"
+            style={{ width: '100%', marginTop: '6px' }}
           >
-            Register
-          </Link>
-        </p>
+            {loading ? 'Signing in...' : 'Sign In to LocalLens →'}
+          </button>
+        </form>
+
+        <footer className="auth-footer">
+          Don&apos;t have an account yet?{' '}
+          <Link to="/register">Create an account</Link>
+        </footer>
       </section>
     </main>
   );

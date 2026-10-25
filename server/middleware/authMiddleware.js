@@ -2,7 +2,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 
-// Verify the JWT and authenticate the user
 export async function protect(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
@@ -34,7 +33,6 @@ export async function protect(req, res, next) {
       });
     }
 
-    // Verify signature, expiry, issuer, audience, and algorithm
     const decoded = jwt.verify(token, secret, {
       algorithms: ['HS256'],
       issuer: 'locallens-api',
@@ -42,7 +40,8 @@ export async function protect(req, res, next) {
     });
 
     if (
-      typeof decoded === 'string' ||
+      typeof decoded !== 'object' ||
+      decoded === null ||
       typeof decoded.sub !== 'string'
     ) {
       return res.status(401).json({
@@ -51,9 +50,7 @@ export async function protect(req, res, next) {
       });
     }
 
-    // Load the current user from MongoDB
-    const user = await User.findById(decoded.sub)
-      .select('+tokenVersion');
+    const user = await User.findById(decoded.sub).select('+tokenVersion');
 
     if (!user || !user.isActive) {
       return res.status(401).json({
@@ -62,7 +59,6 @@ export async function protect(req, res, next) {
       });
     }
 
-    // Invalidate older tokens after tokenVersion is incremented
     const tokenVersion = decoded.ver ?? 0;
 
     if (
@@ -75,16 +71,16 @@ export async function protect(req, res, next) {
       });
     }
 
-    // Attach the authenticated user to the request
     req.user = user;
-
     return next();
   } catch (error) {
     if (
-      error.name === 'JsonWebTokenError' ||
-      error.name === 'TokenExpiredError' ||
-      error.name === 'NotBeforeError' ||
-      error.name === 'CastError'
+      [
+        'JsonWebTokenError',
+        'TokenExpiredError',
+        'NotBeforeError',
+        'CastError',
+    ].includes(error.name)
     ) {
       return res.status(401).json({
         success: false,
@@ -101,7 +97,6 @@ export async function protect(req, res, next) {
   }
 }
 
-// Restrict a route to specified roles
 export function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user) {
@@ -122,7 +117,6 @@ export function requireRole(...roles) {
   };
 }
 
-// Convenience middleware for common roles
 export const requireAdmin = requireRole('admin');
 export const requireVolunteer = requireRole('volunteer');
 export const requireCitizen = requireRole('citizen');

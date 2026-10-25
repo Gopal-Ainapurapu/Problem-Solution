@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "make-admin": "node scripts/makeAdmin.js"
+    "make-admin": "node scripts/makeAdmin.js",
+    "seed": "node scripts/seed.js"
   },
   "engines": {
     "node": ">=20.19.0"
