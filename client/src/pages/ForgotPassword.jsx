@@ -12,6 +12,41 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  const passwordRules = [
+    {
+      id: 'length',
+      label: 'Minimum 8 characters',
+      example: 'Local123',
+      valid: newPassword.length >= 8,
+    },
+    {
+      id: 'upper',
+      label: 'At least one uppercase letter',
+      example: 'L',
+      valid: /[A-Z]/.test(newPassword),
+    },
+    {
+      id: 'lower',
+      label: 'At least one lowercase letter',
+      example: 'ocal',
+      valid: /[a-z]/.test(newPassword),
+    },
+    {
+      id: 'number',
+      label: 'At least one number',
+      example: '123',
+      valid: /\d/.test(newPassword),
+    },
+    {
+      id: 'special',
+      label: 'At least one special character',
+      example: '@, #, !',
+      valid: /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(newPassword),
+    },
+  ];
+
+  const allRulesPassed = passwordRules.every((r) => r.valid);
+
   const handleResetPassword = async (event) => {
     event.preventDefault();
     setErrorMsg('');
@@ -21,8 +56,11 @@ export default function ForgotPassword() {
       return;
     }
 
-    if (newPassword.length < 8 || newPassword.length > 72) {
-      setErrorMsg('New password must be between 8 and 72 characters.');
+    if (!allRulesPassed) {
+      const firstMissing = passwordRules.find((r) => !r.valid);
+      setErrorMsg(
+        `Password requirement not met: ${firstMissing.label} (e.g. ${firstMissing.example})`
+      );
       return;
     }
 
@@ -116,7 +154,63 @@ export default function ForgotPassword() {
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
-            <span className="form-help">Must be between 8 and 72 characters</span>
+
+            {/* Password Validation Rules Helper */}
+            <div
+              style={{
+                marginTop: '10px',
+                padding: '10px 12px',
+                borderRadius: '8px',
+                background: 'var(--color-surface, #ffffff)',
+                border: '1px solid var(--color-border, #E4E6DF)',
+                fontSize: '12px',
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 700,
+                  color: 'var(--color-navy, #202824)',
+                  marginBottom: '6px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                }}
+              >
+                <span>Password Requirements:</span>
+                <span
+                  style={{
+                    color: allRulesPassed ? 'var(--color-success, #287A52)' : 'var(--color-muted, #69736D)',
+                    fontWeight: 700,
+                  }}
+                >
+                  {passwordRules.filter((r) => r.valid).length} of 5 satisfied
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: '4px 10px',
+                }}
+              >
+                {passwordRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      color: rule.valid ? 'var(--color-success, #287A52)' : 'var(--color-secondary, #69736D)',
+                      fontWeight: rule.valid ? 600 : 400,
+                    }}
+                  >
+                    <span style={{ fontSize: '13px' }}>{rule.valid ? '✓' : '○'}</span>
+                    <span>
+                      {rule.label} <code style={{ fontSize: '11px', opacity: 0.85 }}>({rule.example})</code>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="form-group">

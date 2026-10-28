@@ -42,6 +42,14 @@ export default function AdminDashboard() {
   const [volunteersError, setVolunteersError] = useState('');
   const [busyId, setBusyId] = useState('');
 
+  // Multi-Volunteer & Nearby Assignment Modal State
+  const [assignModalReport, setAssignModalReport] = useState(null);
+  const [assignTeamSize, setAssignTeamSize] = useState(1);
+  const [selectedAssignIds, setSelectedAssignIds] = useState([]);
+  const [nearbyVolunteers, setNearbyVolunteers] = useState([]);
+  const [loadingNearby, setLoadingNearby] = useState(false);
+  const [assignTab, setAssignTab] = useState('nearby'); // 'nearby' | 'all'
+
   const loadData = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
@@ -261,6 +269,70 @@ export default function AdminDashboard() {
     } catch (error) {
       toast.error(
         error.response?.data?.message || 'Unable to assign volunteer'
+      );
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const openAssignModal = async (report) => {
+    setAssignModalReport(report);
+    setAssignTeamSize(report.requiredTeamSize || 1);
+    setSelectedAssignIds([]);
+    setAssignTab('nearby');
+    setLoadingNearby(true);
+
+    try {
+      const res = await api.get(`/team/eligible-volunteers/${report._id}`);
+      setNearbyVolunteers(res.data?.volunteers || []);
+    } catch {
+      setNearbyVolunteers([]);
+    } finally {
+      setLoadingNearby(false);
+    }
+  };
+
+  const toggleSelectVolunteer = (id) => {
+    setSelectedAssignIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleConfirmTeamAssignment = async () => {
+    if (!assignModalReport) return;
+    if (selectedAssignIds.length === 0) {
+      toast.error('Please select at least one volunteer to assign.');
+      return;
+    }
+
+    setBusyId(assignModalReport._id);
+
+    try {
+      const response = await api.patch(
+        `/reports/${assignModalReport._id}/assign`,
+        {
+          volunteerIds: selectedAssignIds,
+          requiredTeamSize: Number(assignTeamSize) || selectedAssignIds.length,
+        }
+      );
+
+      const updatedReport = response.data?.report;
+
+      setReports((prev) =>
+        prev.map((item) => {
+          if (item._id !== assignModalReport._id) return item;
+          return updatedReport ? { ...item, ...updatedReport } : item;
+        })
+      );
+
+      toast.success(
+        response.data?.message ||
+          `${selectedAssignIds.length} volunteer(s) assigned successfully.`
+      );
+      setAssignModalReport(null);
+    } catch (error) {
+      toast.error(
+        error.response?.data?.message || 'Unable to complete team assignment.'
       );
     } finally {
       setBusyId('');
@@ -505,43 +577,59 @@ export default function AdminDashboard() {
                         </div>
                       </td>
 
-                      <td style={{ minWidth: '200px' }}>
+                      <td style={{ minWidth: '220px' }}>
                         {report.status === 'verified' ? (
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <select
-                              value={selectedVolunteers[report._id] || ''}
-                              onChange={(e) =>
-                                setSelectedVolunteers((prev) => ({
-                                  ...prev,
-                                  [report._id]: e.target.value,
-                                }))
-                              }
-                              className="admin-volunteer-select"
-                            >
-                              <option value="">Select volunteer...</option>
-                              {volunteers.map((v) => (
-                                <option key={v._id} value={v._id}>
-                                  {v.name} {v.isAvailable ? '(Available)' : '(Busy)'}
-                                </option>
-                              ))}
-                            </select>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <select
+                                value={selectedVolunteers[report._id] || ''}
+                                onChange={(e) =>
+                                  setSelectedVolunteers((prev) => ({
+                                    ...prev,
+                                    [report._id]: e.target.value,
+                                  }))
+                                }
+                                className="admin-volunteer-select"
+                              >
+                                <option value="">Quick assign...</option>
+                                {volunteers.map((v) => (
+                                  <option key={v._id} value={v._id}>
+                                    {v.name} {v.isAvailable ? '(Available)' : '(Busy)'}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <button
+                                type="button"
+                                disabled={
+                                  busyId === report._id ||
+                                  !selectedVolunteers[report._id]
+                                }
+                                onClick={() => assignVolunteer(report)}
+                                className="btn btn-sm btn-primary"
+                              >
+                                Assign
+                              </button>
+                            </div>
 
                             <button
                               type="button"
-                              disabled={
-                                busyId === report._id ||
-                                !selectedVolunteers[report._id]
-                              }
-                              onClick={() => assignVolunteer(report)}
-                              className="btn btn-sm btn-primary"
+                              onClick={() => openAssignModal(report)}
+                              className="btn btn-sm btn-outline"
+                              style={{ width: '100%', fontSize: '12px', padding: '5px 8px' }}
                             >
-                              Assign
+                              👥 Assign Multiple / Nearby ({report.requiredTeamSize || 1} Needed)
                             </button>
                           </div>
                         ) : report.assignedVolunteer ? (
-                          <span style={{ fontSize: '13px', color: '#6840a4', fontWeight: 600 }}>
-                            👤 Assigned to volunteer
-                          </span>
+                          <div>
+                            <span style={{ fontSize: '13px', color: '#593A8B', fontWeight: 600 }}>
+                              👤 Assigned ({report.teamMembers?.length > 1 ? `${report.teamMembers.length} volunteers` : '1 volunteer'})
+                            </span>
+                            <div style={{ fontSize: '11.5px', color: 'var(--color-secondary)' }}>
+                              Req: {report.requiredTeamSize || 1} | {report.recruitmentStatus || 'active'}
+                            </div>
+                          </div>
                         ) : (
                           <span className="text-muted" style={{ fontSize: '13px' }}>
                             {report.status === 'pending'
@@ -625,6 +713,304 @@ export default function AdminDashboard() {
           )}
         </section>
       </main>
+
+      {/* Admin Multi-Volunteer & Nearby Assignment Modal */}
+      {assignModalReport && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '20px',
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              border: '1px solid var(--color-border)',
+              maxWidth: '680px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Modal Header */}
+            <header
+              style={{
+                padding: '20px 24px',
+                borderBottom: '1px solid var(--color-border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                background: 'var(--color-surface)',
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    fontWeight: 750,
+                    textTransform: 'uppercase',
+                    color: 'var(--color-primary)',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  Multi-Volunteer & Geospatial Assignment
+                </span>
+                <h3 style={{ margin: '4px 0 2px', fontSize: '1.25rem' }}>
+                  Assign Volunteers to Report
+                </h3>
+                <p style={{ margin: 0, color: 'var(--color-secondary)', fontSize: '13px' }}>
+                  "{assignModalReport.title}" • 📍 {assignModalReport.address || 'Reported Location'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignModalReport(null)}
+                className="btn btn-outline"
+                style={{ padding: '6px 10px', fontSize: '14px', borderRadius: '50%' }}
+              >
+                ✕
+              </button>
+            </header>
+
+            {/* Modal Body */}
+            <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+              {/* Define Required Team Size */}
+              <div
+                style={{
+                  background: 'var(--color-background)',
+                  border: '1px solid var(--color-border)',
+                  borderRadius: '10px',
+                  padding: '14px 18px',
+                  marginBottom: '18px',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <label
+                      htmlFor="modal-team-size"
+                      style={{ fontWeight: 700, fontSize: '13px', display: 'block', marginBottom: '2px' }}
+                    >
+                      Define Required Volunteers / Team Size:
+                    </label>
+                    <span style={{ fontSize: '12px', color: 'var(--color-secondary)' }}>
+                      Set how many volunteers are expected for this task
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      id="modal-team-size"
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={assignTeamSize}
+                      onChange={(e) => setAssignTeamSize(Math.max(1, Math.min(20, Number(e.target.value))))}
+                      className="form-control"
+                      style={{ width: '80px', textAlign: 'center', fontWeight: 700 }}
+                    />
+                    <span style={{ fontSize: '13px', fontWeight: 600 }}>members</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Volunteer Source Tabs: Surrounded/Nearby vs All */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                <button
+                  type="button"
+                  onClick={() => setAssignTab('nearby')}
+                  className={`btn btn-sm ${assignTab === 'nearby' ? 'btn-primary' : 'btn-outline'}`}
+                >
+                  📍 Surrounded / Nearby Volunteers ({nearbyVolunteers.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAssignTab('all')}
+                  className={`btn btn-sm ${assignTab === 'all' ? 'btn-primary' : 'btn-outline'}`}
+                >
+                  📋 All Volunteers Roster ({volunteers.length})
+                </button>
+              </div>
+
+              {/* Tab 1: Nearby Volunteers */}
+              {assignTab === 'nearby' && (
+                <div>
+                  {loadingNearby ? (
+                    <div style={{ textAlign: 'center', padding: '30px' }}>
+                      <div className="loading-spinner" style={{ margin: '0 auto 8px' }} />
+                      <p style={{ fontSize: '12.5px', color: 'var(--color-secondary)' }}>
+                        Scanning volunteers near report coordinates...
+                      </p>
+                    </div>
+                  ) : nearbyVolunteers.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '24px', background: '#fdfbf7', borderRadius: '8px' }}>
+                      <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-secondary)' }}>
+                        No nearby volunteers found within default range. Switch to "All Volunteers Roster" tab to assign from the complete city roster.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                      {nearbyVolunteers.map((vol) => {
+                        const isSelected = selectedAssignIds.includes(vol._id);
+                        return (
+                          <div
+                            key={vol._id}
+                            onClick={() => toggleSelectVolunteer(vol._id)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 14px',
+                              borderRadius: '8px',
+                              border: `1.5px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                              background: isSelected ? 'var(--color-surface-hover, #f3f7f4)' : '#ffffff',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                              />
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '13.5px' }}>{vol.name}</div>
+                                <div style={{ fontSize: '12px', color: 'var(--color-secondary)' }}>
+                                  {vol.email} • {vol.phone || 'No phone'}
+                                </div>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {vol.distanceKm !== null && (
+                                <span
+                                  style={{
+                                    fontSize: '11.5px',
+                                    fontWeight: 700,
+                                    background: '#e8f0ea',
+                                    color: 'var(--color-primary)',
+                                    padding: '2px 8px',
+                                    borderRadius: '6px',
+                                  }}
+                                >
+                                  📍 {vol.distanceKm} km
+                                </span>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: '11px',
+                                  fontWeight: 600,
+                                  color: vol.isAvailable ? 'var(--color-success)' : 'var(--color-muted)',
+                                }}
+                              >
+                                {vol.isAvailable ? '● Available' : '○ Busy'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 2: All Volunteers */}
+              {assignTab === 'all' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                  {volunteers.map((vol) => {
+                    const isSelected = selectedAssignIds.includes(vol._id);
+                    return (
+                      <div
+                        key={vol._id}
+                        onClick={() => toggleSelectVolunteer(vol._id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '10px 14px',
+                          borderRadius: '8px',
+                          border: `1.5px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                          background: isSelected ? 'var(--color-surface-hover, #f3f7f4)' : '#ffffff',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 700, fontSize: '13.5px' }}>{vol.name}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--color-secondary)' }}>
+                              {vol.email}
+                            </div>
+                          </div>
+                        </div>
+                        <span
+                          style={{
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            color: vol.isAvailable ? 'var(--color-success)' : 'var(--color-muted)',
+                          }}
+                        >
+                          {vol.isAvailable ? '● Available' : '○ Busy'}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <footer
+              style={{
+                padding: '16px 24px',
+                borderTop: '1px solid var(--color-border)',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: 'var(--color-surface)',
+              }}
+            >
+              <div style={{ fontSize: '13px' }}>
+                Selected: <strong>{selectedAssignIds.length}</strong> / Required: <strong>{assignTeamSize}</strong>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setAssignModalReport(null)}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedAssignIds.length === 0 || busyId === assignModalReport._id}
+                  onClick={handleConfirmTeamAssignment}
+                  className="btn btn-primary"
+                >
+                  {busyId === assignModalReport._id ? 'Assigning...' : `Confirm Assignment (${selectedAssignIds.length})`}
+                </button>
+              </div>
+            </footer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

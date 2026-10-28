@@ -446,9 +446,14 @@ router.post(
         });
       }
 
+      const isLeadCandidate =
+        report.teamMembers.length === 0 &&
+        (!report.assignedVolunteer ||
+          report.assignedVolunteer.toString() === req.user._id.toString());
+
       report.teamMembers.push({
         user: req.user._id,
-        role: report.teamMembers.length === 0 ? 'lead' : 'member',
+        role: isLeadCandidate ? 'lead' : 'member',
         joinedAt: new Date(),
       });
 
@@ -596,6 +601,200 @@ router.post(
         success: true,
         message: 'Team recruitment configured and opened successfully.',
         report,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// -------------------------------------------------------------
+// 7b. Field Assessment & Volunteer Reinforcement Request
+// Allows the assigned volunteer to assess the situation on-site,
+// request additional team members, and recruit nearby volunteers
+// without losing ownership of the report.
+// -------------------------------------------------------------
+router.post(
+  '/request-reinforcements/:reportId',
+  protect,
+  requireRole('volunteer', 'admin'),
+  [
+    body('assessmentNote')
+      .isString()
+      .trim()
+      .isLength({ min: 5, max: 1000 })
+      .withMessage(
+        'Please provide an assessment note describing the on-site situation and why reinforcements are required.'
+      ),
+    body('additionalMembersNeeded')
+      .optional()
+      .isInt({ min: 1, max: 20 })
+      .withMessage('Additional members must be between 1 and 20.'),
+    body('newRequiredTeamSize')
+      .optional()
+      .isInt({ min: 2, max: 50 })
+      .withMessage('New required team size must be between 2 and 50.'),
+    body('volunteerIds')
+      .optional()
+      .isArray()
+      .withMessage('volunteerIds must be an array of volunteer IDs.'),
+    body('recruitmentRadiusKm')
+      .optional()
+      .isFloat({ min: 1, max: 100 })
+      .withMessage('Recruitment radius must be between 1 and 100 km.'),
+  ],
+  async (req, res, next) => {
+    try {
+      const { reportId } = req.params;
+      const {
+        assessmentNote,
+        additionalMembersNeeded = 2,
+        newRequiredTeamSize,
+        volunteerIds = [],
+        recruitmentRadiusKm,
+      } = req.body;
+
+      const report = await Report.findById(reportId);
+      if (!report) {
+        return res
+          .status(404)
+          .json({ success: false, message: 'Report not found.' });
+      }
+
+      // Check authorization: must be admin OR the assigned volunteer / coordinator
+      const isLead =
+        (report.assignedVolunteer &&
+          report.assignedVolunteer.toString() === req.user._id.toString()) ||
+        (report.teamCoordinator &&
+          report.teamCoordinator.toString() === req.user._id.toString()) ||
+        req.user.role === 'admin';
+
+      if (!isLead) {
+        return res.status(403).json({
+          success: false,
+          message:
+            'Only the assigned lead volunteer or an administrator can request reinforcements.',
+        });
+      }
+
+      // 1. STRICT OWNERSHIP PRESERVATION:
+      // The current assigned volunteer is kept as the primary owner and lead coordinator!
+      const currentLeadId =
+        report.assignedVolunteer || report.teamCoordinator || req.user._id;
+      report.assignedVolunteer = currentLeadId;
+      report.teamCoordinator = currentLeadId;
+
+      // Ensure current lead is in teamMembers with role: 'lead'
+      const leadIndex = report.teamMembers.findIndex(
+        (m) => m.user.toString() === currentLeadId.toString()
+      );
+      if (leadIndex === -1) {
+        report.teamMembers.unshift({
+          user: currentLeadId,
+          role: 'lead',
+          joinedAt: new Date(),
+        });
+      } else {
+        report.teamMembers[leadIndex].role = 'lead';
+      }
+
+      // 2. Expand team requirements
+      const currentConfirmed = report.teamMembers.length;
+      const targetSize = newRequiredTeamSize
+        ? Math.max(currentConfirmed + 1, Number(newRequiredTeamSize))
+        : currentConfirmed + Number(additionalMembersNeeded);
+
+      report.requiredTeamSize = Math.min(50, Math.max(2, targetSize));
+      report.assignmentType = 'team';
+      report.recruitmentStatus =
+        report.teamMembers.length >= report.requiredTeamSize ? 'full' : 'open';
+
+      if (recruitmentRadiusKm) {
+        report.recruitmentRadiusKm = Number(recruitmentRadiusKm);
+      }
+
+      // Add status history note for transparent audit trail
+      report.statusHistory.push({
+        status: report.status,
+        changedBy: req.user._id,
+        note: `Lead volunteer assessment: "${assessmentNote}". Team size expanded to ${report.requiredTeamSize} members.`,
+      });
+
+      await report.save();
+
+      const io = req.app.get('io');
+      const invitationsCreated = [];
+
+      // 3. Dispatch invitations to selected nearby volunteers
+      if (Array.isArray(volunteerIds) && volunteerIds.length > 0) {
+        for (const volId of volunteerIds) {
+          if (!mongoose.isValidObjectId(volId)) continue;
+          if (volId.toString() === currentLeadId.toString()) continue;
+
+          // Skip if already in team
+          const isMember = report.teamMembers.some(
+            (m) => m.user.toString() === volId.toString()
+          );
+          if (isMember) continue;
+
+          // Check if already invited
+          let invite = await TeamInvitation.findOne({
+            report: report._id,
+            volunteer: volId,
+          });
+
+          if (!invite) {
+            invite = await TeamInvitation.create({
+              report: report._id,
+              volunteer: volId,
+              invitedBy: req.user._id,
+              message: `Reinforcement requested by lead coordinator ${req.user.name}: "${assessmentNote}"`,
+              status: 'pending',
+            });
+            invitationsCreated.push(invite);
+
+            await notifyUser(io, {
+              recipient: volId,
+              report: report._id,
+              type: 'team-invite',
+              title: 'Urgent Task Reinforcement Request',
+              message: `${req.user.name} requested on-site reinforcements for "${report.title}": ${assessmentNote}`,
+            });
+          }
+        }
+      }
+
+      // 4. Post announcement into Team Workspace Chat
+      await TeamMessage.create({
+        report: report._id,
+        sender: req.user._id,
+        senderName: req.user.name,
+        senderRole: 'lead',
+        content: `🚨 [Field Assessment & Team Expansion] ${assessmentNote} (Recruiting up to ${report.requiredTeamSize} total members)`,
+        isSystem: true,
+      });
+
+      if (io) {
+        io.to(`team:${report._id}`).emit('team_message', {
+          reportId: report._id,
+          system: true,
+          content: `Field assessment logged by lead volunteer: ${assessmentNote}`,
+        });
+        io.emit('report:updated', {
+          reportId: report._id,
+          status: report.status,
+          assignmentType: 'team',
+          requiredTeamSize: report.requiredTeamSize,
+          teamCoordinator: report.teamCoordinator,
+          assignedVolunteer: report.assignedVolunteer,
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: `Field assessment logged. Required team size increased to ${report.requiredTeamSize} with ${invitationsCreated.length} invitations dispatched. You retain lead ownership.`,
+        report,
+        invitationsCount: invitationsCreated.length,
       });
     } catch (error) {
       next(error);

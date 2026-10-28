@@ -57,6 +57,15 @@ export default function VolunteerDashboard() {
   const [requestNote, setRequestNote] = useState('');
   const [submittingRequest, setSubmittingRequest] = useState(false);
 
+  // Field Assessment & Reinforcement Request State
+  const [reinforceReport, setReinforceReport] = useState(null);
+  const [assessmentNote, setAssessmentNote] = useState('');
+  const [additionalVolunteers, setAdditionalVolunteers] = useState(2);
+  const [nearbyCandidates, setNearbyCandidates] = useState([]);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
+  const [submittingReinforce, setSubmittingReinforce] = useState(false);
+
   const loadAllData = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
 
@@ -347,6 +356,65 @@ export default function VolunteerDashboard() {
     }
   };
 
+  const openReinforceModal = async (report) => {
+    setReinforceReport(report);
+    setAssessmentNote('');
+    setAdditionalVolunteers(2);
+    setSelectedCandidateIds([]);
+    setLoadingCandidates(true);
+
+    try {
+      const res = await api.get(`/team/eligible-volunteers/${report._id}`);
+      setNearbyCandidates(res.data?.volunteers || []);
+    } catch {
+      setNearbyCandidates([]);
+    } finally {
+      setLoadingCandidates(false);
+    }
+  };
+
+  const toggleCandidateSelection = (volId) => {
+    setSelectedCandidateIds((prev) =>
+      prev.includes(volId) ? prev.filter((id) => id !== volId) : [...prev, volId]
+    );
+  };
+
+  const handleSubmitReinforce = async (e) => {
+    e.preventDefault();
+    if (!reinforceReport) return;
+
+    if (!assessmentNote.trim() || assessmentNote.trim().length < 5) {
+      toast.error('Please enter an assessment note describing why reinforcements are needed.');
+      return;
+    }
+
+    setSubmittingReinforce(true);
+
+    try {
+      const response = await api.post(
+        `/team/request-reinforcements/${reinforceReport._id}`,
+        {
+          assessmentNote: assessmentNote.trim(),
+          additionalMembersNeeded: Number(additionalVolunteers) || 2,
+          volunteerIds: selectedCandidateIds,
+        }
+      );
+
+      toast.success(
+        response.data?.message ||
+          'Reinforcements requested successfully! You remain lead coordinator.'
+      );
+      setReinforceReport(null);
+      loadAllData(true);
+    } catch (err) {
+      toast.error(
+        err.response?.data?.message || 'Failed to submit reinforcement request.'
+      );
+    } finally {
+      setSubmittingReinforce(false);
+    }
+  };
+
   return (
     <div className="volunteer-page">
       <Navbar />
@@ -619,6 +687,18 @@ export default function VolunteerDashboard() {
                         >
                           🚀 Enter Team Workspace & Chat
                         </Link>
+
+                        {/* Request Reinforcements Button */}
+                        {report.status !== 'resolved' && (
+                          <button
+                            type="button"
+                            onClick={() => openReinforceModal(report)}
+                            className="btn btn-sm btn-outline"
+                            style={{ width: '100%', marginBottom: '8px', fontSize: '12px' }}
+                          >
+                            📢 Assess On-Site & Recruit Additional Help
+                          </button>
+                        )}
 
                         {report.status === 'assigned' && (
                           <button
@@ -1048,6 +1128,279 @@ export default function VolunteerDashboard() {
                     {submittingRequest ? 'Submitting...' : 'Submit Request'}
                   </button>
                 </div>
+              </form>
+            </div>
+          </div>
+        )}
+        {/* Volunteer Field Assessment & Additional Volunteers Modal */}
+        {reinforceReport && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0, 0, 0, 0.55)',
+              backdropFilter: 'blur(4px)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1100,
+              padding: '20px',
+            }}
+          >
+            <div
+              style={{
+                background: '#ffffff',
+                borderRadius: '16px',
+                border: '1px solid var(--color-border)',
+                maxWidth: '640px',
+                width: '100%',
+                maxHeight: '90vh',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+                overflow: 'hidden',
+              }}
+            >
+              <header
+                style={{
+                  padding: '20px 24px',
+                  borderBottom: '1px solid var(--color-border)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  background: 'var(--color-surface)',
+                }}
+              >
+                <div>
+                  <span
+                    style={{
+                      fontSize: '11px',
+                      fontWeight: 750,
+                      textTransform: 'uppercase',
+                      color: 'var(--color-primary)',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    On-Site Assessment & Team Expansion
+                  </span>
+                  <h3 style={{ margin: '4px 0 2px', fontSize: '1.25rem' }}>
+                    Request Help & Recruit Nearby Volunteers
+                  </h3>
+                  <p style={{ margin: 0, color: 'var(--color-secondary)', fontSize: '13px' }}>
+                    "{reinforceReport.title}"
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReinforceReport(null)}
+                  disabled={submittingReinforce}
+                  className="btn btn-outline"
+                  style={{ padding: '6px 10px', fontSize: '14px', borderRadius: '50%' }}
+                >
+                  ✕
+                </button>
+              </header>
+
+              <form onSubmit={handleSubmitReinforce} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+                <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
+                  {/* Lead Ownership Banner */}
+                  <div
+                    style={{
+                      background: '#f3f7f4',
+                      border: '1.5px solid #287A52',
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      marginBottom: '16px',
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px',
+                    }}
+                  >
+                    <span style={{ fontSize: '20px' }}>👑</span>
+                    <div>
+                      <strong style={{ display: 'block', color: 'var(--color-primary)', fontSize: '13px', marginBottom: '2px' }}>
+                        Lead Volunteer Ownership Maintained
+                      </strong>
+                      <span style={{ fontSize: '12px', color: 'var(--color-secondary)', lineHeight: 1.4 }}>
+                        You will remain the lead coordinator and retain full ownership of this report. Additional recruited volunteers will join as team members to assist with on-site resolution.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Situation Assessment Note */}
+                  <div className="form-group" style={{ marginBottom: '16px' }}>
+                    <label htmlFor="assess-note" style={{ display: 'block', marginBottom: '6px', fontWeight: 700, fontSize: '13px' }}>
+                      On-Site Assessment Note *
+                    </label>
+                    <textarea
+                      id="assess-note"
+                      rows={3}
+                      required
+                      minLength={5}
+                      maxLength={1000}
+                      value={assessmentNote}
+                      onChange={(e) => setAssessmentNote(e.target.value)}
+                      placeholder="Describe the situation on-site: physical hazard scale, tools needed, or why reinforcements are required..."
+                      className="form-control"
+                      disabled={submittingReinforce}
+                    />
+                    <span className="form-help">This note is recorded in the report history and team workspace.</span>
+                  </div>
+
+                  {/* Additional Members Needed */}
+                  <div
+                    style={{
+                      background: 'var(--color-background)',
+                      border: '1px solid var(--color-border)',
+                      borderRadius: '10px',
+                      padding: '12px 16px',
+                      marginBottom: '18px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div>
+                      <label htmlFor="reinforce-count" style={{ fontWeight: 700, fontSize: '13px', display: 'block' }}>
+                        Additional Teammates Needed:
+                      </label>
+                      <span style={{ fontSize: '12px', color: 'var(--color-secondary)' }}>
+                        Currently confirmed: {reinforceReport.teamMembers?.length || 1} member(s)
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        id="reinforce-count"
+                        type="number"
+                        min={1}
+                        max={15}
+                        value={additionalVolunteers}
+                        onChange={(e) => setAdditionalVolunteers(Math.max(1, Math.min(15, Number(e.target.value))))}
+                        className="form-control"
+                        style={{ width: '80px', textAlign: 'center', fontWeight: 700 }}
+                        disabled={submittingReinforce}
+                      />
+                      <span style={{ fontSize: '13px', fontWeight: 600 }}>volunteers</span>
+                    </div>
+                  </div>
+
+                  {/* Nearby Volunteers Geospatial Section */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <label style={{ fontWeight: 700, fontSize: '13px' }}>
+                        Nearby Available Volunteers ({nearbyCandidates.length})
+                      </label>
+                      <span style={{ fontSize: '11.5px', color: 'var(--color-secondary)' }}>
+                        Select candidates to invite immediately
+                      </span>
+                    </div>
+
+                    {loadingCandidates ? (
+                      <div style={{ textAlign: 'center', padding: '24px' }}>
+                        <div className="loading-spinner" style={{ margin: '0 auto 8px' }} />
+                        <p style={{ fontSize: '12px', color: 'var(--color-secondary)' }}>
+                          Scanning volunteers near incident coordinates...
+                        </p>
+                      </div>
+                    ) : nearbyCandidates.length === 0 ? (
+                      <div style={{ padding: '16px', background: 'var(--color-background)', borderRadius: '8px', textAlign: 'center' }}>
+                        <p style={{ margin: 0, fontSize: '12.5px', color: 'var(--color-secondary)' }}>
+                          No nearby available volunteers currently detected. You can still submit this request to open the vacancy on the public volunteer console!
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto' }}>
+                        {nearbyCandidates.map((vol) => {
+                          const isSelected = selectedCandidateIds.includes(vol._id);
+                          return (
+                            <div
+                              key={vol._id}
+                              onClick={() => toggleCandidateSelection(vol._id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                border: `1.5px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                                background: isSelected ? 'var(--color-surface-hover, #f3f7f4)' : '#ffffff',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => {}}
+                                  style={{ cursor: 'pointer' }}
+                                />
+                                <div>
+                                  <div style={{ fontWeight: 700, fontSize: '13px' }}>{vol.name}</div>
+                                  <div style={{ fontSize: '11.5px', color: 'var(--color-secondary)' }}>
+                                    {vol.skills?.slice(0, 3).join(', ') || 'General volunteer'}
+                                  </div>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {vol.distanceKm !== null && (
+                                  <span
+                                    style={{
+                                      fontSize: '11px',
+                                      fontWeight: 700,
+                                      background: '#e8f0ea',
+                                      color: 'var(--color-primary)',
+                                      padding: '2px 6px',
+                                      borderRadius: '4px',
+                                    }}
+                                  >
+                                    📍 {vol.distanceKm} km
+                                  </span>
+                                )}
+                                <span style={{ fontSize: '11px', color: vol.isAvailable ? 'var(--color-success)' : 'var(--color-muted)' }}>
+                                  {vol.isAvailable ? '● Available' : '○ Busy'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <footer
+                  style={{
+                    padding: '16px 24px',
+                    borderTop: '1px solid var(--color-border)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    background: 'var(--color-surface)',
+                  }}
+                >
+                  <span style={{ fontSize: '12.5px', color: 'var(--color-secondary)' }}>
+                    Inviting: <strong>{selectedCandidateIds.length}</strong> candidate(s)
+                  </span>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setReinforceReport(null)}
+                      disabled={submittingReinforce}
+                      className="btn btn-outline"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submittingReinforce || !assessmentNote.trim()}
+                      className="btn btn-primary"
+                    >
+                      {submittingReinforce ? 'Submitting Assessment...' : 'Submit Assessment & Recruit Help →'}
+                    </button>
+                  </div>
+                </footer>
               </form>
             </div>
           </div>

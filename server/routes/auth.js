@@ -24,6 +24,28 @@ const OTP_LIFETIME_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const MAX_OTP_ATTEMPTS = 5;
 
+export function validatePasswordStrength(password) {
+  if (typeof password !== 'string' || password.length < 8) {
+    return { valid: false, message: 'Password must be at least 8 characters long.' };
+  }
+  if (password.length > 72) {
+    return { valid: false, message: 'Password cannot exceed 72 characters.' };
+  }
+  if (!/[A-Z]/.test(password)) {
+    return { valid: false, message: 'Password must contain at least one uppercase letter (e.g. L).' };
+  }
+  if (!/[a-z]/.test(password)) {
+    return { valid: false, message: 'Password must contain at least one lowercase letter (e.g. ocal).' };
+  }
+  if (!/\d/.test(password)) {
+    return { valid: false, message: 'Password must contain at least one number (e.g. 123).' };
+  }
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?~`]/.test(password)) {
+    return { valid: false, message: 'Password must contain at least one special character (e.g. @, #, !).' };
+  }
+  return { valid: true };
+}
+
 function validate(req, res, next) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -246,8 +268,13 @@ router.post(
 
     body('password')
       .isString().withMessage('Password is required.')
-      .isLength({ min: 8, max: 72 })
-      .withMessage('Password must be between 8 and 72 characters.'),
+      .custom((value) => {
+        const result = validatePasswordStrength(value);
+        if (!result.valid) {
+          throw new Error(result.message);
+        }
+        return true;
+      }),
 
     body('role')
       .optional()
@@ -516,8 +543,14 @@ router.post(
     body('email').isEmail().withMessage('Enter a valid email address.').normalizeEmail(),
     body('newPassword')
       .optional()
-      .isLength({ min: 8, max: 72 })
-      .withMessage('New password must be between 8 and 72 characters.'),
+      .custom((value) => {
+        if (!value) return true;
+        const result = validatePasswordStrength(value);
+        if (!result.valid) {
+          throw new Error(result.message);
+        }
+        return true;
+      }),
     validate,
   ],
   async (req, res) => {
@@ -683,8 +716,13 @@ router.post(
       .withMessage('A valid reset authorization is required.'),
     body('newPassword')
       .isString()
-      .isLength({ min: 8, max: 72 })
-      .withMessage('Password must be between 8 and 72 characters.'),
+      .custom((value) => {
+        const result = validatePasswordStrength(value);
+        if (!result.valid) {
+          throw new Error(result.message);
+        }
+        return true;
+      }),
     validate,
   ],
   async (req, res) => {

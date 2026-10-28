@@ -226,6 +226,16 @@ router.post(
         (req.files || []).map(uploadImageToCloudinary)
       );
 
+      const rawTeamSize = Number(req.body.requiredTeamSize);
+      const requiredTeamSize =
+        Number.isInteger(rawTeamSize) && rawTeamSize >= 1 && rawTeamSize <= 50
+          ? rawTeamSize
+          : 1;
+      const assignmentType =
+        req.body.assignmentType === 'team' || requiredTeamSize > 1
+          ? 'team'
+          : 'single';
+
       const report = await Report.create({
         reporter: req.user._id,
         title: req.body.title.trim(),
@@ -238,6 +248,8 @@ router.post(
         address: req.body.address?.trim() || '',
         images,
         status: 'pending',
+        requiredTeamSize,
+        assignmentType,
         statusHistory: [
           {
             status: 'pending',
@@ -439,8 +451,11 @@ router.get(
         totalReports,
         statusCounts,
         categoryCounts,
+        priorityCounts,
         monthlyResults,
+        monthlyResolvedResults,
         resolutionResults,
+        teamStats,
       ] = await Promise.all([
         Report.countDocuments(),
 
@@ -465,6 +480,15 @@ router.get(
 
         Report.aggregate([
           {
+            $group: {
+              _id: '$priority',
+              count: { $sum: 1 },
+            },
+          },
+        ]),
+
+        Report.aggregate([
+          {
             $match: {
               createdAt: { $gte: firstMonth },
             },
@@ -474,6 +498,25 @@ router.get(
               _id: {
                 year: { $year: '$createdAt' },
                 month: { $month: '$createdAt' },
+              },
+              count: { $sum: 1 },
+            },
+          },
+          { $sort: { '_id.year': 1, '_id.month': 1 } },
+        ]),
+
+        Report.aggregate([
+          {
+            $match: {
+              status: 'resolved',
+              resolvedAt: { $gte: firstMonth },
+            },
+          },
+          {
+            $group: {
+              _id: {
+                year: { $year: '$resolvedAt' },
+                month: { $month: '$resolvedAt' },
               },
               count: { $sum: 1 },
             },
@@ -507,6 +550,15 @@ router.get(
             },
           },
         ]),
+
+        Report.aggregate([
+          {
+            $group: {
+              _id: '$assignmentType',
+              count: { $sum: 1 },
+            },
+          },
+        ]),
       ]);
 
       const statuses = [
@@ -522,8 +574,19 @@ router.get(
         statusCounts.map((item) => [item._id, item.count])
       );
 
+      const priorityMap = Object.fromEntries(
+        priorityCounts.map((item) => [item._id || 'medium', item.count])
+      );
+
       const monthlyMap = new Map(
         monthlyResults.map((item) => [
+          `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
+          item.count,
+        ])
+      );
+
+      const monthlyResolvedMap = new Map(
+        monthlyResolvedResults.map((item) => [
           `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
           item.count,
         ])
@@ -547,6 +610,7 @@ router.get(
         monthlyReports.push({
           month: key,
           reports: monthlyMap.get(key) || 0,
+          resolved: monthlyResolvedMap.get(key) || 0,
         });
       }
 
@@ -554,6 +618,10 @@ router.get(
         averageHours: null,
         resolvedCount: 0,
       };
+
+      const teamMap = Object.fromEntries(
+        teamStats.map((item) => [item._id || 'single', item.count])
+      );
 
       return res.json({
         success: true,
@@ -569,6 +637,12 @@ router.get(
             category: item._id,
             count: item.count,
           })),
+          priorityCounts: {
+            urgent: priorityMap.urgent || 0,
+            high: priorityMap.high || 0,
+            medium: priorityMap.medium || 0,
+            low: priorityMap.low || 0,
+          },
           monthlyReports,
           resolution: {
             resolvedCount: resolution.resolvedCount,
@@ -576,6 +650,10 @@ router.get(
               resolution.averageHours === null
                 ? null
                 : Math.round(resolution.averageHours * 100) / 100,
+          },
+          teamDeployments: {
+            single: teamMap.single || 0,
+            team: teamMap.team || 0,
           },
           generatedAt: new Date().toISOString(),
         },
@@ -628,21 +706,30 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 6. Assign a volunteer to a verified report.
+// 6. Assign a volunteer or team of volunteers to a verified report.
 router.patch(
   '/:id/assign',
   protect,
   requireRole('admin'),
   [
     body('volunteerId')
+      .optional()
       .isMongoId()
       .withMessage('A valid volunteer ID is required.'),
+    body('volunteerIds')
+      .optional()
+      .isArray()
+      .withMessage('volunteerIds must be an array of IDs.'),
+    body('requiredTeamSize')
+      .optional()
+      .isInt({ min: 1, max: 50 })
+      .withMessage('requiredTeamSize must be between 1 and 50.'),
   ],
   validateRequest,
   async (req, res) => {
     try {
       const { id } = req.params;
-      const { volunteerId } = req.body;
+      const { volunteerId, volunteerIds, requiredTeamSize: rawTeamSize } = req.body;
 
       if (!mongoose.isValidObjectId(id)) {
         return res.status(400).json({
@@ -667,59 +754,114 @@ router.patch(
         });
       }
 
-      const volunteer = await User.findOne({
-        _id: volunteerId,
+      // Collect target volunteer IDs
+      let targetIds = [];
+      if (Array.isArray(volunteerIds) && volunteerIds.length > 0) {
+        targetIds = volunteerIds.filter((vId) => mongoose.isValidObjectId(vId));
+      } else if (volunteerId && mongoose.isValidObjectId(volunteerId)) {
+        targetIds = [volunteerId];
+      }
+
+      if (targetIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Please provide at least one valid volunteer ID to assign.',
+        });
+      }
+
+      const volunteers = await User.find({
+        _id: { $in: targetIds },
         role: 'volunteer',
         isActive: true,
       });
 
-      if (!volunteer) {
+      if (!volunteers || volunteers.length === 0) {
         return res.status(404).json({
           success: false,
-          message: 'Active volunteer not found.',
+          message: 'No active volunteers found with the provided IDs.',
         });
       }
 
-      report.assignedVolunteer = volunteer._id;
+      const targetTeamSize = rawTeamSize
+        ? Math.max(1, Math.min(50, Number(rawTeamSize)))
+        : Math.max(report.requiredTeamSize || 1, volunteers.length);
+
+      const leadVolunteer = volunteers[0];
+      report.assignedVolunteer = leadVolunteer._id;
+      report.teamCoordinator = leadVolunteer._id;
+      report.requiredTeamSize = targetTeamSize;
+      report.assignmentType =
+        targetTeamSize > 1 || volunteers.length > 1 ? 'team' : 'single';
       report.status = 'assigned';
 
+      // Build team members
+      report.teamMembers = volunteers.map((vol, index) => ({
+        user: vol._id,
+        role: index === 0 ? 'lead' : 'member',
+        joinedAt: new Date(),
+      }));
+
+      report.recruitmentStatus =
+        report.teamMembers.length >= targetTeamSize
+          ? 'full'
+          : targetTeamSize > 1
+            ? 'open'
+            : 'none';
+
+      const volunteerNames = volunteers.map((v) => v.name).join(', ');
       report.statusHistory.push({
         status: 'assigned',
         changedBy: req.user._id,
-        note: 'Volunteer assigned by administrator.',
+        note: `Assigned ${volunteers.length} volunteer(s) [${volunteerNames}] with required team size of ${targetTeamSize} by administrator.`,
       });
 
       await report.save();
 
       const io = req.app.get('io');
 
-      await createUserNotification({
-        recipient: volunteer._id,
-        report: report._id,
-        type: 'report-assigned',
-        title: 'New report assigned',
-        message: `You have been assigned the report "${report.title}".`,
-      }, io);
+      // Send notifications to each assigned volunteer
+      for (const vol of volunteers) {
+        await createUserNotification(
+          {
+            recipient: vol._id,
+            report: report._id,
+            type: 'report-assigned',
+            title: 'New report assigned',
+            message: `You have been assigned to the report "${report.title}".`,
+          },
+          io
+        );
+      }
 
-      await createUserNotification({
-        recipient: report.reporter,
-        report: report._id,
-        type: 'report-assigned',
-        title: 'Volunteer assigned',
-        message: `A volunteer has been assigned to your report "${report.title}".`,
-      }, io);
+      // Notify citizen reporter
+      await createUserNotification(
+        {
+          recipient: report.reporter,
+          report: report._id,
+          type: 'report-assigned',
+          title: 'Volunteer team assigned',
+          message: `${
+            volunteers.length > 1
+              ? `${volunteers.length} volunteers have`
+              : 'A volunteer has'
+          } been assigned to your report "${report.title}".`,
+        },
+        io
+      );
 
       if (io) {
         io.emit('report:updated', {
           reportId: report._id,
           status: report.status,
-          assignedVolunteer: volunteer._id,
+          assignedVolunteer: leadVolunteer._id,
+          teamMembersCount: volunteers.length,
+          requiredTeamSize: targetTeamSize,
         });
       }
 
       return res.json({
         success: true,
-        message: 'Volunteer assigned successfully.',
+        message: `${volunteers.length} volunteer(s) assigned successfully.`,
         report,
       });
     } catch (error) {

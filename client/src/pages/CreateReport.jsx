@@ -67,6 +67,7 @@ export default function CreateReport() {
     description: '',
     category: 'garbage',
     priority: 'medium',
+    requiredTeamSize: 1,
     address: '',
     latitude: '',
     longitude: '',
@@ -246,6 +247,7 @@ export default function CreateReport() {
       formData.append('description', form.description.trim());
       formData.append('category', form.category);
       formData.append('priority', form.priority);
+      formData.append('requiredTeamSize', String(form.requiredTeamSize || 1));
       formData.append('address', form.address.trim());
       formData.append('latitude', String(lat));
       formData.append('longitude', String(lon));
@@ -377,6 +379,25 @@ export default function CreateReport() {
                   <option value="medium">Medium (Standard civic issue)</option>
                   <option value="high">High (Impacting many residents)</option>
                   <option value="urgent">Urgent (Immediate safety risk)</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="report-teamsize" className="field-label">
+                  Volunteers Required
+                </label>
+                <select
+                  id="report-teamsize"
+                  name="requiredTeamSize"
+                  value={form.requiredTeamSize}
+                  onChange={updateField}
+                  className="form-control"
+                >
+                  <option value={1}>1 Volunteer (Standard solo assignment)</option>
+                  <option value={2}>2 Volunteers (Pair task)</option>
+                  <option value={3}>3 Volunteers (Small crew)</option>
+                  <option value={5}>5 Volunteers (Task force)</option>
+                  <option value={10}>10 Volunteers (Major mobilization)</option>
                 </select>
               </div>
             </div>

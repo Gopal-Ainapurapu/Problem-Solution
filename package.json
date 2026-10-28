@@ -11,5 +11,9 @@
     "lint": "npm --prefix client run lint",
     "seed": "npm --prefix server run seed",
     "make-admin": "npm --prefix server run make-admin --"
+  },
+  "devDependencies": {
+    "docx": "^9.14.0",
+    "pptxgenjs": "^4.0.1"
   }
 }
